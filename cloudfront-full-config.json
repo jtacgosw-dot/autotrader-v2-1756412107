@@ -1,0 +1,117 @@
+{
+    "CallerReference": "b568c223-d695-458b-a3c0-1e3fe7a7b386",
+    "Aliases": {
+        "Quantity": 1,
+        "Items": [
+            "app.lunaraxolotl.com"
+        ]
+    },
+    "DefaultRootObject": "",
+    "Origins": {
+        "Quantity": 1,
+        "Items": [
+            {
+                "Id": "app.lunaraxolotl.com.s3.us-east-1.amazonaws.com-meul230dek7",
+                "DomainName": "app.lunaraxolotl.com.s3.us-east-1.amazonaws.com",
+                "OriginPath": "",
+                "CustomHeaders": {
+                    "Quantity": 0
+                },
+                "S3OriginConfig": {
+                    "OriginAccessIdentity": "origin-access-identity/cloudfront/E3N3T0IOH924Q7"
+                },
+                "ConnectionAttempts": 3,
+                "ConnectionTimeout": 10,
+                "OriginShield": {
+                    "Enabled": false
+                }
+            }
+        ]
+    },
+    "OriginGroups": {
+        "Quantity": 0
+    },
+    "DefaultCacheBehavior": {
+        "TargetOriginId": "app.lunaraxolotl.com.s3.us-east-1.amazonaws.com-meul230dek7",
+        "TrustedSigners": {
+            "Enabled": false,
+            "Quantity": 0
+        },
+        "TrustedKeyGroups": {
+            "Enabled": false,
+            "Quantity": 0
+        },
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+            "Quantity": 2,
+            "Items": [
+                "HEAD",
+                "GET"
+            ],
+            "CachedMethods": {
+                "Quantity": 2,
+                "Items": [
+                    "HEAD",
+                    "GET"
+                ]
+            }
+        },
+        "SmoothStreaming": false,
+        "Compress": true,
+        "LambdaFunctionAssociations": {
+            "Quantity": 0
+        },
+        "FunctionAssociations": {
+            "Quantity": 0
+        },
+        "FieldLevelEncryptionId": "",
+        "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+        "ResponseHeadersPolicyId": "925c839c-dfdf-47cc-9489-09d69df5605c"
+    },
+    "CacheBehaviors": {
+        "Quantity": 0
+    },
+    "CustomErrorResponses": {
+        "Quantity": 2,
+        "Items": [
+            {
+                "ErrorCode": 403,
+                "ResponsePagePath": "/index.html",
+                "ResponseCode": "200",
+                "ErrorCachingMinTTL": 1010
+            },
+            {
+                "ErrorCode": 404,
+                "ResponsePagePath": "/index.html",
+                "ResponseCode": "200",
+                "ErrorCachingMinTTL": 10
+            }
+        ]
+    },
+    "Comment": "React Web Hub distribution for app.lunaraxolotl.com",
+    "Logging": {
+        "Enabled": false,
+        "IncludeCookies": false,
+        "Bucket": "",
+        "Prefix": ""
+    },
+    "PriceClass": "PriceClass_All",
+    "Enabled": true,
+    "ViewerCertificate": {
+        "CloudFrontDefaultCertificate": false,
+        "ACMCertificateArn": "arn:aws:acm:us-east-1:123198875719:certificate/8680d340-0ea0-459a-9b70-72e7b7baea00",
+        "SSLSupportMethod": "sni-only",
+        "MinimumProtocolVersion": "TLSv1.2_2021",
+        "Certificate": "arn:aws:acm:us-east-1:123198875719:certificate/8680d340-0ea0-459a-9b70-72e7b7baea00",
+        "CertificateSource": "acm"
+    },
+    "Restrictions": {
+        "GeoRestriction": {
+            "RestrictionType": "none",
+            "Quantity": 0
+        }
+    },
+    "WebACLId": "",
+    "HttpVersion": "http2",
+    "IsIPV6Enabled": true
+}

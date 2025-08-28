@@ -1,0 +1,62 @@
+2025-08-28 20:16:19,389 - INFO - Starting 24.0-hour stability test
+/home/ubuntu/autotrader/scripts/stability_monitor.py:129: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  self.metrics["start_time"] = datetime.utcnow().isoformat()
+/home/ubuntu/autotrader/scripts/stability_monitor.py:131: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  start_time = datetime.utcnow()
+/home/ubuntu/autotrader/scripts/stability_monitor.py:137: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  while datetime.utcnow() < end_time:
+2025-08-28 20:16:19,390 - INFO - Running check #1
+/home/ubuntu/autotrader/scripts/stability_monitor.py:55: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "timestamp": datetime.utcnow().isoformat(),
+/home/ubuntu/autotrader/scripts/stability_monitor.py:91: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "timestamp": datetime.utcnow().isoformat(),
+2025-08-28 20:17:20,242 - INFO - Running check #2
+2025-08-28 20:18:20,678 - INFO - Running check #3
+2025-08-28 20:19:21,188 - INFO - Running check #4
+2025-08-28 20:20:21,592 - INFO - Running check #5
+2025-08-28 20:21:22,024 - INFO - Running check #6
+2025-08-28 20:22:22,525 - INFO - Running check #7
+2025-08-28 20:23:23,048 - INFO - Running check #8
+2025-08-28 20:24:23,538 - INFO - Running check #9
+2025-08-28 20:25:24,027 - INFO - Running check #10
+/home/ubuntu/autotrader/scripts/stability_monitor.py:152: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  elapsed = datetime.utcnow() - start_time
+/home/ubuntu/autotrader/scripts/stability_monitor.py:153: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  remaining = end_time - datetime.utcnow()
+2025-08-28 20:26:24,616 - INFO - Progress: 0:10:05.226242 elapsed, 23:49:54.773725 remaining
+2025-08-28 20:26:24,616 - INFO - Running check #11
+2025-08-28 20:27:25,008 - INFO - Running check #12
+2025-08-28 20:28:25,660 - INFO - Running check #13
+2025-08-28 20:29:26,116 - INFO - Running check #14
+2025-08-28 20:30:26,504 - INFO - Running check #15
+2025-08-28 20:31:27,035 - INFO - Running check #16
+2025-08-28 20:32:27,441 - INFO - Running check #17
+2025-08-28 20:33:27,896 - INFO - Running check #18
+2025-08-28 20:34:28,392 - INFO - Running check #19
+2025-08-28 20:35:28,967 - INFO - Running check #20
+2025-08-28 20:36:29,464 - INFO - Progress: 0:20:10.073914 elapsed, 23:39:49.926078 remaining
+2025-08-28 20:36:29,464 - INFO - Running check #21
+2025-08-28 20:37:30,037 - INFO - Running check #22
+2025-08-28 20:38:30,542 - INFO - Running check #23
+2025-08-28 20:39:31,016 - INFO - Running check #24
+2025-08-28 20:40:31,554 - INFO - Running check #25
+2025-08-28 20:41:31,950 - INFO - Running check #26
+2025-08-28 20:42:32,480 - INFO - Running check #27
+2025-08-28 20:43:33,024 - INFO - Running check #28
+2025-08-28 20:44:33,528 - INFO - Running check #29
+2025-08-28 20:45:33,933 - INFO - Running check #30
+2025-08-28 20:46:34,444 - INFO - Progress: 0:30:15.053978 elapsed, 23:29:44.946015 remaining
+2025-08-28 20:46:34,444 - INFO - Running check #31
+2025-08-28 20:47:35,056 - INFO - Running check #32
+2025-08-28 20:48:35,523 - INFO - Running check #33
+2025-08-28 20:49:36,027 - INFO - Running check #34
+2025-08-28 20:50:36,530 - INFO - Running check #35
+2025-08-28 20:51:37,103 - INFO - Running check #36
+2025-08-28 20:52:37,587 - INFO - Running check #37
+2025-08-28 20:53:38,220 - INFO - Running check #38
+2025-08-28 20:54:38,744 - INFO - Running check #39
+2025-08-28 20:55:39,260 - INFO - Running check #40
+2025-08-28 20:56:39,747 - INFO - Progress: 0:40:20.357003 elapsed, 23:19:39.642990 remaining
+2025-08-28 20:56:39,747 - INFO - Running check #41
+2025-08-28 20:57:40,305 - INFO - Running check #42
+2025-08-28 20:58:40,821 - INFO - Running check #43
