@@ -20,6 +20,7 @@ services:
     working_dir: /app
     volumes:
       - ./api:/app
+      - ~/.aws:/root/.aws:ro
     command: >
       sh -c "
         pip install fastapi uvicorn python-multipart boto3 requests &&
@@ -28,6 +29,12 @@ services:
     environment:
       - TRADING_MODE=paper
       - PYTHONPATH=/app
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - autotrader

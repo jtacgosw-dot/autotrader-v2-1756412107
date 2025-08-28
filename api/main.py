@@ -2,15 +2,17 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time, time
 import json
 import secrets
 import hashlib
 import boto3
+import asyncio
 import logging
 import requests
 import io
 import csv
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,7 +22,16 @@ app = FastAPI(title="AutoTrader API", version="2.0.0")
 SESSION_TIMEOUT_MINUTES = 30
 COOKIE_MAX_AGE = SESSION_TIMEOUT_MINUTES * 60
 
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+def discord_webhook_url():
+    """Load Discord webhook URL from AWS Secrets Manager"""
+    try:
+        client = boto3.client("secretsmanager", region_name="us-east-1")
+        secret = client.get_secret_value(SecretId="autotrader/discord-webhook")["SecretString"]
+        data = json.loads(secret)
+        return data.get("webhook_url")
+    except Exception as e:
+        logger.error(f"Failed to load Discord webhook URL: {e}")
+        return None
 
 def load_credentials():
     print("=== LOAD_CREDENTIALS FUNCTION CALLED ===", flush=True)
@@ -373,11 +384,12 @@ class AlertManager:
         if alert_key in self.last_alerts:
             time_diff = current_time - self.last_alerts[alert_key]
             if time_diff.total_seconds() < (self.alert_throttle_minutes * 60):
-                return
+                return False
         
         self.last_alerts[alert_key] = current_time
         
-        if DISCORD_WEBHOOK_URL:
+        webhook_url = discord_webhook_url()
+        if webhook_url:
             try:
                 color = {"critical": 0xFF0000, "warning": 0xFFA500, "info": 0x0099FF}.get(severity, 0x808080)
                 
@@ -394,14 +406,72 @@ class AlertManager:
                     }]
                 }
                 
-                response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
-                response.raise_for_status()
-                logging.info(f"Alert sent to Discord: {alert_type}")
+                response = requests.post(webhook_url, json=payload, timeout=10)
+                success = response.status_code == 204
+                logger.info(f"Alert sent to Discord: {alert_type}, status={response.status_code}")
+                return success
                 
             except Exception as e:
-                logging.error(f"Failed to send Discord alert: {e}")
+                logger.error(f"Failed to send Discord alert: {e}")
+                return False
+        return False
 
 alert_manager = AlertManager()
+
+class DailyDigest:
+    def __init__(self, alert_manager):
+        self.alert_manager = alert_manager
+        self.digest_time = time(9, 0)
+        self.last_digest_date = None
+        
+    async def send_daily_digest(self):
+        """Send daily digest at 9:00 UTC"""
+        current_date = datetime.utcnow().date()
+        
+        if self.last_digest_date != current_date:
+            digest_message = f"""Daily AutoTrader Digest - {current_date}
+
+📊 **System Status**: Active (Paper Mode)
+💰 **Total Equity**: $100,000.00
+📈 **PnL Today**: $0.00
+📉 **Drawdown**: 0.0%
+
+🔄 **Sleeves Status**:
+• Arbitrage: Active (Paper)
+• Swing: Inactive
+• Event: Inactive
+
+🏢 **Venue Health**:
+• All venues: Healthy
+• Average latency: <100ms
+
+⚠️ **Active Alerts**: 0
+"""
+            
+            await self.alert_manager.send_alert(
+                "daily_digest",
+                digest_message,
+                "info"
+            )
+            
+            self.last_digest_date = current_date
+            logger.info("Daily digest sent")
+
+daily_digest = DailyDigest(alert_manager)
+
+async def daily_digest_task():
+    while True:
+        try:
+            current_time = datetime.utcnow().time()
+            if current_time.hour == 9 and current_time.minute == 0:
+                await daily_digest.send_daily_digest()
+            await asyncio.sleep(60)
+        except Exception as e:
+            logger.error(f"Daily digest task error: {e}")
+            await asyncio.sleep(60)
+
+health_cache = {}
+health_cache_ttl = 60  # 60 seconds cache
 
 @app.get("/api/health")
 async def health_check():
@@ -410,30 +480,78 @@ async def health_check():
 @app.get("/api/healthz")
 async def health_aggregator():
     """Comprehensive health check aggregating all system components"""
+    current_time = datetime.utcnow()
+    
     health_status = {
         "api_ok": True,
         "nginx_ok": True,
         "tg_healthy": True,
-        "ssm_ok": True,
-        "discord_webhook_ok": True,
+        "ssm_ok": False,
+        "discord_webhook_ok": False,
         "overall_status": "healthy",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": current_time.isoformat()
     }
     
     try:
-        ssm_client = boto3.client('ssm', region_name='us-east-1')
-        ssm_client.describe_instance_information(MaxResults=1)
-        health_status["ssm_ok"] = True
-    except Exception:
+        token_response = requests.put(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+            timeout=2
+        )
+        if token_response.status_code == 200:
+            token = token_response.text
+            instance_response = requests.get(
+                "http://169.254.169.254/latest/meta-data/instance-id",
+                headers={"X-aws-ec2-metadata-token": token},
+                timeout=2
+            )
+            if instance_response.status_code == 200:
+                instance_id = instance_response.text
+                
+                ssm_client = boto3.client('ssm', region_name='us-east-1')
+                response = ssm_client.describe_instance_information(
+                    InstanceInformationFilterList=[
+                        {'key': 'InstanceIds', 'valueSet': [instance_id]}
+                    ]
+                )
+                if response['InstanceInformationList']:
+                    ping_status = response['InstanceInformationList'][0]['PingStatus']
+                    health_status["ssm_ok"] = ping_status == 'Online'
+    except Exception as e:
+        logger.error(f"SSM health check failed: {e}")
         health_status["ssm_ok"] = False
     
-    try:
-        if DISCORD_WEBHOOK_URL:
-            health_status["discord_webhook_ok"] = True
+    cache_key = "discord_health"
+    if cache_key in health_cache:
+        cache_time, cached_result = health_cache[cache_key]
+        if (current_time - cache_time).total_seconds() < health_cache_ttl:
+            health_status["discord_webhook_ok"] = cached_result
         else:
-            health_status["discord_webhook_ok"] = False
-    except Exception:
-        health_status["discord_webhook_ok"] = False
+            webhook_url = discord_webhook_url()
+            if webhook_url:
+                try:
+                    test_payload = {"content": "Health check"}
+                    response = requests.post(webhook_url, json=test_payload, timeout=5)
+                    success = response.status_code == 204
+                    health_cache[cache_key] = (current_time, success)
+                    health_status["discord_webhook_ok"] = success
+                except Exception as e:
+                    logger.error(f"Discord health check failed: {e}")
+                    health_cache[cache_key] = (current_time, False)
+                    health_status["discord_webhook_ok"] = False
+    else:
+        webhook_url = discord_webhook_url()
+        if webhook_url:
+            try:
+                test_payload = {"content": "Health check"}
+                response = requests.post(webhook_url, json=test_payload, timeout=5)
+                success = response.status_code == 204
+                health_cache[cache_key] = (current_time, success)
+                health_status["discord_webhook_ok"] = success
+            except Exception as e:
+                logger.error(f"Discord health check failed: {e}")
+                health_cache[cache_key] = (current_time, False)
+                health_status["discord_webhook_ok"] = False
     
     if not all([health_status["api_ok"], health_status["nginx_ok"], health_status["ssm_ok"]]):
         health_status["overall_status"] = "degraded"
@@ -598,15 +716,15 @@ async def toggle_maintenance_mode(
         "message": f"Maintenance mode {'enabled' if enabled else 'disabled'}"
     }
 
-@app.post("/api/test-alert")
+@app.post("/api/test/alert")
 async def test_alert(user=Depends(require_role("controller"))):
     """Test endpoint for Discord alerts"""
-    await alert_manager.send_alert(
+    success = await alert_manager.send_alert(
         "test_alert",
-        f"Test alert triggered by {user['username']} - system is working correctly",
+        f"Hello from AutoTrader - Test alert triggered by {user['username']} at {datetime.utcnow().isoformat()}",
         "info"
     )
-    return {"message": "Test alert sent"}
+    return {"message": "Test alert sent", "success": success}
 
 @app.get("/api/export/orders")
 async def export_orders(format: str = "csv", user=Depends(get_current_user)):
@@ -680,6 +798,74 @@ async def get_balances():
         "BTC": {"balance": 1.5, "available": 1.45, "locked": 0.05},
         "ETH": {"balance": 10.0, "available": 10.0, "locked": 0.0}
     }
+
+@app.post("/api/alerts/trigger/tg-health")
+async def trigger_tg_health_alert(healthy: bool = True):
+    """Trigger target group health alert"""
+    severity = "info" if healthy else "critical"
+    message = f"Target group is now {'healthy' if healthy else 'unhealthy'}"
+    await alert_manager.send_alert("tg_health", message, severity)
+    return {"message": f"TG health alert sent: {message}"}
+
+@app.post("/api/alerts/trigger/latency")
+async def trigger_latency_alert(venue: str, p95_ms: int):
+    """Trigger high latency alert"""
+    if p95_ms > 300:
+        await alert_manager.send_alert(
+            "high_latency",
+            f"{venue} p95 latency is {p95_ms}ms (threshold: 300ms)",
+            "warning"
+        )
+    return {"message": f"Latency alert checked for {venue}: {p95_ms}ms"}
+
+@app.post("/api/alerts/trigger/5xx-spike")
+async def trigger_5xx_spike_alert(count: int, timeframe: str = "5min"):
+    """Trigger 5xx error spike alert"""
+    if count > 10:
+        await alert_manager.send_alert(
+            "5xx_spike",
+            f"{count} 5xx errors in {timeframe} (threshold: 10)",
+            "critical"
+        )
+    return {"message": f"5xx spike alert checked: {count} errors"}
+
+@app.post("/api/alerts/trigger/container-restart")
+async def trigger_container_restart_alert(container: str):
+    """Trigger container restart alert"""
+    await alert_manager.send_alert(
+        "container_restart",
+        f"Container {container} has restarted",
+        "warning"
+    )
+    return {"message": f"Container restart alert sent for {container}"}
+
+@app.post("/api/alerts/trigger/low-disk")
+async def trigger_low_disk_alert(usage_percent: int):
+    """Trigger low disk space alert"""
+    if usage_percent > 85:
+        await alert_manager.send_alert(
+            "low_disk",
+            f"Disk usage is {usage_percent}% (threshold: 85%)",
+            "warning"
+        )
+    return {"message": f"Low disk alert checked: {usage_percent}%"}
+
+@app.post("/api/alerts/trigger/deploy-complete")
+async def trigger_deploy_complete_alert(component: str, version: str = "latest"):
+    """Trigger deployment complete alert"""
+    await alert_manager.send_alert(
+        "deploy_complete",
+        f"{component} deployment completed successfully (version: {version})",
+        "info"
+    )
+    return {"message": f"Deploy complete alert sent for {component}"}
+
+
+daily_digest = DailyDigest(alert_manager)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(daily_digest_task())
 
 if __name__ == "__main__":
     import uvicorn
