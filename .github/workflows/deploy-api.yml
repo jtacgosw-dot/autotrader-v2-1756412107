@@ -1,0 +1,45 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths: ['api/**', 'nginx/**', 'docker-compose.yml']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      
+      - name: Package deployment
+        run: |
+          tar -czf autotrader-deploy.tar.gz api/ nginx/ docker-compose.yml prometheus/ grafana/
+      
+      - name: Upload to S3
+        run: |
+          aws s3 cp autotrader-deploy.tar.gz s3://autotrader-deploy-bucket-v2/
+      
+      - name: Deploy via SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids i-06051733a989e0abf \
+            --parameters commands='[
+              "cd /opt/autotrader",
+              "aws s3 cp s3://autotrader-deploy-bucket-v2/autotrader-deploy.tar.gz .",
+              "tar -xzf autotrader-deploy.tar.gz",
+              "docker compose pull",
+              "docker compose up -d"
+            ]' \
+            --comment "AutoTrader API deployment"
