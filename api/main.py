@@ -12,7 +12,9 @@ import logging
 import requests
 import io
 import csv
-import asyncio
+import threading
+import time
+from datetime import datetime, time as datetime_time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -352,6 +354,7 @@ async def login(login_data: LoginRequest, response: Response):
     response.set_cookie(
         key="session_id",
         value=session_id,
+        domain=".lunaraxolotl.com",
         httponly=True,
         secure=True,
         samesite="lax",
@@ -421,7 +424,7 @@ alert_manager = AlertManager()
 class DailyDigest:
     def __init__(self, alert_manager):
         self.alert_manager = alert_manager
-        self.digest_time = time(9, 0)
+        self.digest_time = datetime_time(9, 0)
         self.last_digest_date = None
         
     async def send_daily_digest(self):
@@ -457,6 +460,89 @@ class DailyDigest:
             self.last_digest_date = current_date
             logger.info("Daily digest sent")
 
+health_cache = {
+    "discord_ok": False,
+    "ssm_ok": False,
+    "last_updated": datetime.utcnow(),
+    "instance_id": None
+}
+
+def get_instance_id():
+    """Get EC2 instance ID from metadata service"""
+    try:
+        token_response = requests.put(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+            timeout=2
+        )
+        if token_response.status_code == 200:
+            token = token_response.text
+            instance_response = requests.get(
+                "http://169.254.169.254/latest/meta-data/instance-id",
+                headers={"X-aws-ec2-metadata-token": token},
+                timeout=2
+            )
+            if instance_response.status_code == 200:
+                return instance_response.text
+    except Exception as e:
+        logger.error(f"Failed to get instance ID: {e}")
+    return None
+
+def refresh_health_probes():
+    """Background task to refresh health probes every 60 seconds"""
+    global health_cache
+    
+    if not health_cache.get("instance_id"):
+        health_cache["instance_id"] = get_instance_id()
+    
+    try:
+        webhook_url = discord_webhook_url()
+        if webhook_url:
+            response = requests.post(
+                webhook_url, 
+                json={"content": "Health check ping"}, 
+                timeout=3
+            )
+            health_cache["discord_ok"] = (response.status_code == 204)
+        else:
+            health_cache["discord_ok"] = False
+    except Exception as e:
+        logger.error(f"Discord health probe failed: {e}")
+        health_cache["discord_ok"] = False
+    
+    try:
+        instance_id = health_cache.get("instance_id")
+        if instance_id:
+            ssm_client = boto3.client('ssm', region_name='us-east-1')
+            response = ssm_client.describe_instance_information(
+                InstanceInformationFilterList=[
+                    {'key': 'InstanceIds', 'valueSet': [instance_id]}
+                ]
+            )
+            if response['InstanceInformationList']:
+                ping_status = response['InstanceInformationList'][0]['PingStatus']
+                health_cache["ssm_ok"] = (ping_status == 'Online')
+            else:
+                health_cache["ssm_ok"] = False
+        else:
+            health_cache["ssm_ok"] = False
+    except Exception as e:
+        logger.error(f"SSM health probe failed: {e}")
+        health_cache["ssm_ok"] = False
+    
+    health_cache["last_updated"] = datetime.utcnow()
+    logger.info(f"Health probes updated: discord_ok={health_cache['discord_ok']}, ssm_ok={health_cache['ssm_ok']}")
+
+def background_health_monitor():
+    """Background thread for health monitoring"""
+    while True:
+        try:
+            refresh_health_probes()
+            time.sleep(60)
+        except Exception as e:
+            logger.error(f"Background health monitor error: {e}")
+            time.sleep(60)
+
 daily_digest = DailyDigest(alert_manager)
 
 async def daily_digest_task():
@@ -479,60 +565,19 @@ async def health_check():
 
 @app.get("/api/healthz")
 async def health_aggregator():
-    """Comprehensive health check aggregating all system components"""
+    """Comprehensive health check using cached probe results"""
     current_time = datetime.utcnow()
     
     health_status = {
         "api_ok": True,
         "nginx_ok": True,
         "tg_healthy": True,
-        "ssm_ok": False,
-        "discord_webhook_ok": False,
+        "ssm_ok": health_cache["ssm_ok"],
+        "discord_webhook_ok": health_cache["discord_ok"],
         "overall_status": "healthy",
-        "timestamp": current_time.isoformat()
+        "timestamp": current_time.isoformat(),
+        "last_probe": health_cache["last_updated"].isoformat()
     }
-    
-    try:
-        token_response = requests.put(
-            "http://169.254.169.254/latest/api/token",
-            headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
-            timeout=2
-        )
-        if token_response.status_code == 200:
-            token = token_response.text
-            instance_response = requests.get(
-                "http://169.254.169.254/latest/meta-data/instance-id",
-                headers={"X-aws-ec2-metadata-token": token},
-                timeout=2
-            )
-            if instance_response.status_code == 200:
-                instance_id = instance_response.text
-                
-                ssm_client = boto3.client('ssm', region_name='us-east-1')
-                response = ssm_client.describe_instance_information(
-                    InstanceInformationFilterList=[
-                        {'key': 'InstanceIds', 'valueSet': [instance_id]}
-                    ]
-                )
-                if response['InstanceInformationList']:
-                    ping_status = response['InstanceInformationList'][0]['PingStatus']
-                    health_status["ssm_ok"] = ping_status == 'Online'
-    except Exception as e:
-        logger.error(f"SSM health check failed: {e}")
-        health_status["ssm_ok"] = False
-    
-    webhook_url = discord_webhook_url()
-    if webhook_url:
-        try:
-            test_payload = {"content": "Health check"}
-            response = requests.post(webhook_url, json=test_payload, timeout=5)
-            health_status["discord_webhook_ok"] = response.status_code == 204
-            logger.info(f"Discord health check: HTTP {response.status_code}")
-        except Exception as e:
-            logger.error(f"Discord health check failed: {e}")
-            health_status["discord_webhook_ok"] = False
-    else:
-        health_status["discord_webhook_ok"] = False
     
     if not all([health_status["api_ok"], health_status["nginx_ok"], health_status["ssm_ok"]]):
         health_status["overall_status"] = "degraded"
@@ -841,12 +886,39 @@ async def trigger_deploy_complete_alert(component: str, version: str = "latest")
     )
     return {"message": f"Deploy complete alert sent for {component}"}
 
+@app.get("/api/debug/whoami")
+async def debug_whoami(request: Request, user=Depends(require_role("controller"))):
+    """Debug endpoint to check authentication status"""
+    session_id = request.cookies.get("session_id")
+    return {
+        "user": user["username"],
+        "role": user["role"],
+        "cookie_seen": session_id is not None,
+        "session_id": session_id[:8] + "..." if session_id else None,
+        "headers": dict(request.headers)
+    }
+
+@app.get("/api/debug/cors")
+async def debug_cors(request: Request, user=Depends(require_role("controller"))):
+    """Debug endpoint to check CORS headers"""
+    return {
+        "request_headers": dict(request.headers),
+        "origin": request.headers.get("origin"),
+        "user_agent": request.headers.get("user-agent"),
+        "referer": request.headers.get("referer")
+    }
+
 
 daily_digest = DailyDigest(alert_manager)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(daily_digest_task())
+    
+    health_thread = threading.Thread(target=background_health_monitor, daemon=True)
+    health_thread.start()
+    
+    refresh_health_probes()
 
 if __name__ == "__main__":
     import uvicorn
