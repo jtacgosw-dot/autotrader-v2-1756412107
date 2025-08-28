@@ -521,37 +521,18 @@ async def health_aggregator():
         logger.error(f"SSM health check failed: {e}")
         health_status["ssm_ok"] = False
     
-    cache_key = "discord_health"
-    if cache_key in health_cache:
-        cache_time, cached_result = health_cache[cache_key]
-        if (current_time - cache_time).total_seconds() < health_cache_ttl:
-            health_status["discord_webhook_ok"] = cached_result
-        else:
-            webhook_url = discord_webhook_url()
-            if webhook_url:
-                try:
-                    test_payload = {"content": "Health check"}
-                    response = requests.post(webhook_url, json=test_payload, timeout=5)
-                    success = response.status_code == 204
-                    health_cache[cache_key] = (current_time, success)
-                    health_status["discord_webhook_ok"] = success
-                except Exception as e:
-                    logger.error(f"Discord health check failed: {e}")
-                    health_cache[cache_key] = (current_time, False)
-                    health_status["discord_webhook_ok"] = False
+    webhook_url = discord_webhook_url()
+    if webhook_url:
+        try:
+            test_payload = {"content": "Health check"}
+            response = requests.post(webhook_url, json=test_payload, timeout=5)
+            health_status["discord_webhook_ok"] = response.status_code == 204
+            logger.info(f"Discord health check: HTTP {response.status_code}")
+        except Exception as e:
+            logger.error(f"Discord health check failed: {e}")
+            health_status["discord_webhook_ok"] = False
     else:
-        webhook_url = discord_webhook_url()
-        if webhook_url:
-            try:
-                test_payload = {"content": "Health check"}
-                response = requests.post(webhook_url, json=test_payload, timeout=5)
-                success = response.status_code == 204
-                health_cache[cache_key] = (current_time, success)
-                health_status["discord_webhook_ok"] = success
-            except Exception as e:
-                logger.error(f"Discord health check failed: {e}")
-                health_cache[cache_key] = (current_time, False)
-                health_status["discord_webhook_ok"] = False
+        health_status["discord_webhook_ok"] = False
     
     if not all([health_status["api_ok"], health_status["nginx_ok"], health_status["ssm_ok"]]):
         health_status["overall_status"] = "degraded"
