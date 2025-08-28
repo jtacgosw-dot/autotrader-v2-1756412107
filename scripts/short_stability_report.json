@@ -1,0 +1,55 @@
+{
+  "test_summary": {
+    "start_time": "2025-08-28T19:38:40.264310",
+    "end_time": "2025-08-28T19:43:46.161427",
+    "duration_hours": 24.0,
+    "total_api_requests": 30,
+    "success_rate_percent": 100.0
+  },
+  "api_performance": {
+    "success_count": 30,
+    "error_count": 0,
+    "exception_count": 0,
+    "latency_statistics": {
+      "min_ms": 72.64,
+      "max_ms": 498.36,
+      "avg_ms": 87.33,
+      "p50_ms": 73.09,
+      "p95_ms": 265.21,
+      "p99_ms": 498.36
+    }
+  },
+  "health_monitoring": {
+    "total_checks": 30,
+    "components": {
+      "api_ok": {
+        "success_rate": 100.0,
+        "total_checks": 30
+      },
+      "nginx_ok": {
+        "success_rate": 100.0,
+        "total_checks": 30
+      },
+      "tg_healthy": {
+        "success_rate": 100.0,
+        "total_checks": 30
+      },
+      "ssm_ok": {
+        "success_rate": 0.0,
+        "total_checks": 30
+      },
+      "discord_webhook_ok": {
+        "success_rate": 0.0,
+        "total_checks": 30
+      }
+    }
+  },
+  "error_summary": {
+    "total_errors": 0,
+    "recent_errors": []
+  },
+  "recommendations": [
+    "ssm_ok health check success rate (0.0%) is below 95%",
+    "discord_webhook_ok health check success rate (0.0%) is below 95%"
+  ]
+}

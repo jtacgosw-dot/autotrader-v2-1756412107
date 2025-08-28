@@ -1,0 +1,33 @@
+2025-08-28 19:38:40,263 - INFO - Starting 5-minute stability test
+2025-08-28 19:38:40,264 - INFO - Running check #1
+2025-08-28 19:38:50,890 - INFO - Running check #2
+2025-08-28 19:39:01,068 - INFO - Running check #3
+2025-08-28 19:39:11,238 - INFO - Running check #4
+2025-08-28 19:39:21,437 - INFO - Running check #5
+2025-08-28 19:39:31,607 - INFO - Running check #6
+2025-08-28 19:39:41,808 - INFO - Running check #7
+2025-08-28 19:39:52,000 - INFO - Running check #8
+2025-08-28 19:40:02,162 - INFO - Running check #9
+2025-08-28 19:40:12,321 - INFO - Running check #10
+2025-08-28 19:40:22,508 - INFO - Running check #11
+2025-08-28 19:40:32,663 - INFO - Running check #12
+2025-08-28 19:40:42,864 - INFO - Running check #13
+2025-08-28 19:40:53,043 - INFO - Running check #14
+2025-08-28 19:41:03,245 - INFO - Running check #15
+2025-08-28 19:41:13,444 - INFO - Running check #16
+2025-08-28 19:41:23,616 - INFO - Running check #17
+2025-08-28 19:41:33,816 - INFO - Running check #18
+2025-08-28 19:41:44,010 - INFO - Running check #19
+2025-08-28 19:41:54,173 - INFO - Running check #20
+2025-08-28 19:42:04,374 - INFO - Running check #21
+2025-08-28 19:42:14,561 - INFO - Running check #22
+2025-08-28 19:42:24,716 - INFO - Running check #23
+2025-08-28 19:42:34,892 - INFO - Running check #24
+2025-08-28 19:42:45,070 - INFO - Running check #25
+2025-08-28 19:42:55,271 - INFO - Running check #26
+2025-08-28 19:43:05,471 - INFO - Running check #27
+2025-08-28 19:43:15,641 - INFO - Running check #28
+2025-08-28 19:43:25,804 - INFO - Running check #29
+2025-08-28 19:43:35,997 - INFO - Running check #30
+2025-08-28 19:43:46,161 - INFO - Short stability test completed
+2025-08-28 19:43:46,162 - INFO - Report saved to short_stability_report.json
