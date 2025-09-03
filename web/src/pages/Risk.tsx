@@ -166,6 +166,36 @@ export function Risk() {
     setIsUpdating(false)
   }
 
+  const handleSmokeTradeTest = async () => {
+    setIsUpdating(true)
+    try {
+      const response = await fetch(`${apiBase}/api/test/smoke_trade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          symbol: 'BTC/USDT',
+          side: 'buy',
+          notionalUsd: 5
+        })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        alert(`Smoke trade submitted: ${result.order_id}`)
+      } else {
+        const error = await response.json()
+        alert(`Smoke trade failed: ${error.detail}`)
+      }
+    } catch (error) {
+      console.error('Error executing smoke trade:', error)
+      alert('Smoke trade failed: Network error')
+    }
+    setIsUpdating(false)
+  }
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
@@ -206,6 +236,14 @@ export function Risk() {
                 >
                   <Play className="w-4 h-4 mr-2" />
                   Resume
+                </button>
+                <button
+                  onClick={handleSmokeTradeTest}
+                  disabled={isUpdating || riskSettings.botStatus === 'paused'}
+                  className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center justify-center"
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  $5 Smoke Test
                 </button>
               </div>
 

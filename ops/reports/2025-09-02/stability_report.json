@@ -1,0 +1,17 @@
+{
+  "test_duration_minutes": 2,
+  "start_time": "2025-09-03T00:11:40.113185",
+  "endpoints_tested": [
+    "/api/health",
+    "/api/healthz",
+    "/api/risk"
+  ],
+  "total_requests": 23,
+  "successful_requests": 23,
+  "failed_requests": 0,
+  "avg_response_time_ms": 314.5808966263481,
+  "max_response_time_ms": 367.53249168395996,
+  "errors": [],
+  "end_time": "2025-09-03T00:13:42.352514",
+  "success_rate": 100.0
+}

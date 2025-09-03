@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-02T23:30:08.201187",
+  "results": {
+    "debug_endpoints": true,
+    "redis_health_cache": true,
+    "smoke_trade_endpoint": false,
+    "csp_headers": false,
+    "risk_settings": false,
+    "trading_mode": true,
+    "maintenance_mode": true
+  },
+  "summary": {
+    "total_tests": 7,
+    "passed_tests": 4,
+    "success_rate": 0.5714285714285714
+  }
+}

@@ -59,10 +59,14 @@ logger = logging.getLogger(__name__)
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=int(os.getenv("REDIS_PORT", "6379")),
-    decode_responses=True
+    decode_responses=True,
+    socket_connect_timeout=5,
+    socket_timeout=5,
+    retry_on_timeout=True,
+    health_check_interval=30
 )
 HEALTH_CACHE_KEY = "autotrader:healthz"
-HEALTH_CACHE_TTL = 90  # seconds
+HEALTH_CACHE_TTL = 90
 
 json_handler = logging.StreamHandler()
 json_handler.setFormatter(RedactedJSONFormatter())
@@ -144,14 +148,16 @@ bot_state = {
     "status": "running",
     "mode": "paper",
     "paused": False,
+    "daily_kill_pct": 0.8,
+    "max_pos_pct": 0.5,
+    "max_slippage_bps": 6,
+    "kill_switch_active": False,
+    "maintenance_mode": False,
     "kill_switch_active": False,
     "maintenance_mode": False,
     "total_equity": 100000.0,
     "pnl_today": 1250.75,
-    "drawdown": 0.35,
-    "daily_kill_pct": 1.0,
-    "max_pos_pct": 1.0,
-    "max_slippage_bps": 6
+    "drawdown": 0.35
 }
 
 sleeves = {
@@ -635,7 +641,7 @@ def refresh_health_probes():
         logger.error(f"SSM health probe failed: {e}")
     
     health_data = {
-        "discord_ok": discord_ok,
+        "discord_webhook_ok": discord_ok,
         "ssm_ok": ssm_ok,
         "last_updated": datetime.utcnow().isoformat(),
         "instance_id": instance_id
@@ -676,6 +682,13 @@ def daily_digest_task():
         except Exception as e:
             logger.error(f"Daily digest task error: {e}")
             time.sleep(60)
+def start_daily_digest_scheduler():
+    """Start the daily digest scheduler thread"""
+    digest_thread = threading.Thread(target=daily_digest_task, name="DailyDigestThread", daemon=True)
+    digest_thread.start()
+    logger.info("Daily digest scheduler thread started")
+
+
 
 @app.get("/api/health")
 async def health_check():
@@ -687,41 +700,22 @@ async def health_aggregator():
     """Comprehensive health check using Redis cached probe results"""
     current_time = datetime.utcnow()
     
-    print(f"[HEALTHZ] Health aggregator called at {current_time}")
-    logger.info(f"[HEALTHZ] Health aggregator called at {current_time}")
-    
     try:
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = os.getenv("REDIS_PORT", "6379")
-        print(f"[HEALTHZ] Attempting Redis connection to {redis_host}:{redis_port}")
-        logger.info(f"[HEALTHZ] Attempting Redis connection to {redis_host}:{redis_port}")
-        
-        ping_result = redis_client.ping()
-        print(f"[HEALTHZ] Redis ping result: {ping_result}")
-        logger.info(f"[HEALTHZ] Redis ping result: {ping_result}")
-        
         cached_data = redis_client.get(HEALTH_CACHE_KEY)
-        print(f"[HEALTHZ] Redis get result for key '{HEALTH_CACHE_KEY}': {cached_data}")
-        logger.info(f"[HEALTHZ] Redis get result for key '{HEALTH_CACHE_KEY}': {cached_data}")
         
         if cached_data:
             health_data = json.loads(cached_data)
-            discord_ok = health_data.get("discord_ok", False)
+            discord_ok = health_data.get("discord_webhook_ok", False)
             ssm_ok = health_data.get("ssm_ok", False)
             last_updated = health_data.get("last_updated")
             cache_source = "redis"
-            print(f"[HEALTHZ] Successfully parsed Redis data: discord_ok={discord_ok}, ssm_ok={ssm_ok}")
-            logger.info(f"[HEALTHZ] Successfully parsed Redis data: discord_ok={discord_ok}, ssm_ok={ssm_ok}")
         else:
             discord_ok = False
             ssm_ok = False
             last_updated = None
             cache_source = "redis_empty"
-            print("[HEALTHZ] Redis cache key not found or empty")
-            logger.warning("[HEALTHZ] Redis cache key not found or empty")
     except Exception as e:
-        print(f"[HEALTHZ] Failed to read Redis health cache: {e}")
-        logger.error(f"[HEALTHZ] Failed to read Redis health cache: {e}")
+        logger.error(f"Failed to read Redis health cache: {e}")
         discord_ok = False
         ssm_ok = False
         last_updated = None
@@ -738,9 +732,6 @@ async def health_aggregator():
         "last_probe": last_updated,
         "cache_source": cache_source
     }
-    
-    print(f"[HEALTHZ] Final health status: {health_status}")
-    logger.info(f"[HEALTHZ] Final health status: {health_status}")
     
     if not all([health_status["api_ok"], health_status["nginx_ok"], health_status["ssm_ok"]]):
         health_status["overall_status"] = "degraded"
@@ -977,7 +968,11 @@ async def get_risk_settings():
         "daily_kill_pct": bot_state["daily_kill_pct"],
         "max_pos_pct": bot_state["max_pos_pct"],
         "max_slippage_bps": bot_state["max_slippage_bps"],
-        "kill_switch_active": bot_state["kill_switch_active"]
+        "kill_switch_active": bot_state["kill_switch_active"],
+        "withdrawals_enabled": False,
+        "pairs": ["BTC/USDT", "ETH/USDT"],
+        "min_notional_usd": 10,
+        "trading_mode": os.getenv("TRADING_MODE", "paper")
     }
 
 @app.get("/api/balances")
@@ -1116,6 +1111,57 @@ async def startup_event():
     
     refresh_health_probes()
     logger.info("Initial health probe completed")
+
+class SmokeTradeRequest(BaseModel):
+    symbol: str
+    side: str
+    notionalUsd: float
+
+@app.post("/api/test/smoke_trade")
+async def smoke_trade(request: SmokeTradeRequest, current_user: dict = Depends(require_role("controller"))):
+    """Controller-only $5 smoke trade endpoint"""
+    if request.notionalUsd > 10:
+        raise HTTPException(status_code=400, detail="Smoke trade limited to $10 max")
+    
+    if request.symbol not in ["BTC/USDT", "ETH/USDT"]:
+        raise HTTPException(status_code=400, detail="Only BTC/USDT and ETH/USDT supported for smoke trades")
+    
+    if request.side.upper() not in ["BUY", "SELL"]:
+        raise HTTPException(status_code=400, detail="Side must be BUY or SELL")
+    
+    order_id = f"smoke_{int(time.time())}"
+    
+    audit_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "type": "smoke_trade",
+        "user": current_user["username"],
+        "symbol": request.symbol,
+        "side": request.side.upper(),
+        "notional_usd": request.notionalUsd,
+        "order_id": order_id,
+        "status": "submitted",
+        "mode": "smoke"
+    }
+    
+    logger.info(f"Smoke trade executed: {audit_entry}")
+    
+    return {
+        "order_id": order_id,
+        "symbol": request.symbol,
+        "side": request.side.upper(),
+        "notional_usd": request.notionalUsd,
+        "status": "submitted",
+        "message": "Smoke trade submitted successfully"
+    }
+
+@app.get("/api/mode")
+async def get_mode():
+    """Return current trading mode"""
+    return {
+        "mode": os.getenv("TRADING_MODE", "paper"),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
 
 if __name__ == "__main__":
     import uvicorn

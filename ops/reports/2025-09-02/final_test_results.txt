@@ -1,0 +1,35 @@
+AutoTrader Deliverables Test Suite - 2025-09-02 23:30:04.042115
+============================================================
+=== Testing Debug Endpoints ===
+Debug whoami (no auth): 404
+Debug cors (no auth): 404
+=== Testing Redis Health Cache ===
+Health cache consistency: True
+Sample response: {'discord_webhook_ok': False, 'ssm_ok': False, 'cache_source': None}
+=== Testing Smoke Trade Endpoint ===
+Smoke trade (no auth): 404
+=== Testing CSP Headers ===
+CSP header present: True
+Contains unsafe-inline: True
+=== Testing Risk Settings ===
+Conservative risk settings: False
+Settings: {'daily_kill_pct': 1.0, 'max_pos_pct': 1.0, 'max_slippage_bps': 6, 'kill_switch_active': False}
+=== Testing Trading Mode ===
+Trading mode is paper: True
+Mode data: {'mode': 'paper'}
+=== Testing Maintenance Mode ===
+Maintenance mode: {'maintenance_mode': False, 'timestamp': '2025-09-02T23:30:08.359191'}
+
+============================================================
+TEST RESULTS SUMMARY:
+debug_endpoints      : PASS
+redis_health_cache   : PASS
+smoke_trade_endpoint : FAIL
+csp_headers          : FAIL
+risk_settings        : FAIL
+trading_mode         : PASS
+maintenance_mode     : PASS
+
+Overall: 4/7 tests passed
+
+Results saved to ops/reports/2025-09-02/deliverables_test_results.json
