@@ -104,13 +104,13 @@ def load_credentials():
         client = boto3.client('secretsmanager', region_name='us-east-1')
         
         print("=== FETCHING VIEWER CREDENTIALS ===", flush=True)
-        viewer_secret = client.get_secret_value(SecretId='autotrader/viewer-credentials')
+        viewer_secret = client.get_secret_value(SecretId='autotrader/viewer')
         viewer_data = json.loads(viewer_secret['SecretString'])
         print(f"=== SUCCESS: Loaded viewer credentials for: {viewer_data['username']} ===", flush=True)
         logger.info(f"Loaded viewer credentials for: {viewer_data['username']}")
         
         print("=== FETCHING CONTROLLER CREDENTIALS ===", flush=True)
-        controller_secret = client.get_secret_value(SecretId='autotrader/controller-credentials')
+        controller_secret = client.get_secret_value(SecretId='autotrader/controller')
         controller_data = json.loads(controller_secret['SecretString'])
         print(f"=== SUCCESS: Loaded controller credentials for: {controller_data['username']} ===", flush=True)
         logger.info(f"Loaded controller credentials for: {controller_data['username']}")
@@ -390,7 +390,7 @@ async def dashboard(user=Depends(get_current_user)):
     return HTMLResponse(content=dashboard_html)
 
 @app.post("/api/login")
-async def login(login_data: LoginRequest, response: Response):
+async def login(login_data: LoginRequest, request: Request, response: Response):
     username = login_data.username
     password = login_data.password
     
@@ -418,12 +418,14 @@ async def login(login_data: LoginRequest, response: Response):
         "last_activity": datetime.utcnow()
     }
     
+    is_local = request.headers.get("host", "").startswith(("127.0.0.1", "localhost"))
+    
     response.set_cookie(
         key="session",
         value=session_id,
-        domain=".lunaraxolotl.com",
+        domain=None if is_local else ".lunaraxolotl.com",
         httponly=True,
-        secure=True,
+        secure=not is_local,
         samesite="lax",
         max_age=COOKIE_MAX_AGE,
         path="/"
