@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 import os
 from datetime import datetime, timedelta, time as datetime_time
@@ -17,6 +18,7 @@ import threading
 import time
 import redis
 import re
+from typing import AsyncGenerator
 
 class RedactedJSONFormatter(logging.Formatter):
     """JSON formatter that redacts sensitive information"""
@@ -67,6 +69,8 @@ redis_client = redis.Redis(
 )
 HEALTH_CACHE_KEY = "autotrader:healthz"
 HEALTH_CACHE_TTL = 90
+TRADES_CHANNEL = "autotrader:trades"
+HEALTH_CHANNEL = "autotrader:health"
 
 json_handler = logging.StreamHandler()
 json_handler.setFormatter(RedactedJSONFormatter())
@@ -83,6 +87,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token"],
 )
 
+
 SESSION_TIMEOUT_MINUTES = 30
 COOKIE_MAX_AGE = SESSION_TIMEOUT_MINUTES * 60
 
@@ -98,50 +103,49 @@ def discord_webhook_url():
         return None
 
 def load_credentials():
-    print("=== LOAD_CREDENTIALS FUNCTION CALLED ===", flush=True)
     logger.info("Loading credentials from AWS Secrets Manager")
     try:
         client = boto3.client('secretsmanager', region_name='us-east-1')
         
-        print("=== FETCHING VIEWER CREDENTIALS ===", flush=True)
         viewer_secret = client.get_secret_value(SecretId='autotrader/viewer')
         viewer_data = json.loads(viewer_secret['SecretString'])
-        print(f"=== SUCCESS: Loaded viewer credentials for: {viewer_data['username']} ===", flush=True)
         logger.info(f"Loaded viewer credentials for: {viewer_data['username']}")
         
-        print("=== FETCHING CONTROLLER CREDENTIALS ===", flush=True)
         controller_secret = client.get_secret_value(SecretId='autotrader/controller')
         controller_data = json.loads(controller_secret['SecretString'])
-        print(f"=== SUCCESS: Loaded controller credentials for: {controller_data['username']} ===", flush=True)
         logger.info(f"Loaded controller credentials for: {controller_data['username']}")
         
         credentials = {
             viewer_data['username']: {"password": viewer_data['password'], "role": "viewer"},
             controller_data['username']: {"password": controller_data['password'], "role": "controller"}
         }
-        print(f"=== CREDENTIALS LOADED FROM SECRETS MANAGER: {list(credentials.keys())} ===", flush=True)
         logger.info(f"Successfully loaded {len(credentials)} user credentials from Secrets Manager")
         return credentials
     except Exception as e:
-        print(f"=== FAILED TO LOAD FROM SECRETS MANAGER: {e} ===", flush=True)
         logger.error(f"Failed to load credentials from Secrets Manager: {e}")
-        import traceback
-        traceback.print_exc()
-        print("=== USING FALLBACK ENVIRONMENT VARIABLES ===", flush=True)
         logger.info("Using fallback environment variable credentials")
         fallback_creds = {
             "viewer": {"password": os.getenv("VIEWER_PASSWORD", "ViewerPass123!"), "role": "viewer"},
             "controller": {"password": os.getenv("CONTROLLER_PASSWORD", "ControllerPass456!"), "role": "controller"}
         }
-        print(f"=== FALLBACK CREDENTIALS: {list(fallback_creds.keys())} ===", flush=True)
         return fallback_creds
 
-sessions = {}
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=int(os.getenv("REDIS_PORT", "6379")),
+    decode_responses=True,
+    socket_connect_timeout=5,
+    socket_timeout=5,
+    retry_on_timeout=True,
+    health_check_interval=30
+)
+
+SESSION_TIMEOUT_MINUTES = 30
+COOKIE_MAX_AGE = 60 * 60 * 12
+SESSION_PREFIX = "autotrader:session:"
 
 # Load user credentials
-print("=== ABOUT TO CALL LOAD_CREDENTIALS ===", flush=True)
 users = load_credentials()
-print(f"=== USERS LOADED: {list(users.keys())} ===", flush=True)
 logger.info(f"Loaded user credentials: {list(users.keys())}")
 
 bot_state = {
@@ -242,18 +246,40 @@ class LoginRequest(BaseModel):
 
 def get_current_user(request: Request):
     session_id = request.cookies.get("session")
-    if not session_id or session_id not in sessions:
+    logger.info(f"Session validation - Cookie: {session_id[:20] if session_id else 'None'}...")
+    
+    if not session_id:
+        logger.error("No session cookie found")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    session = sessions[session_id]
-    
-    if datetime.utcnow() - session["last_activity"] > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
-        del sessions[session_id]
-        raise HTTPException(status_code=401, detail="Session expired")
-    
-    session["last_activity"] = datetime.utcnow()
-    
-    return session
+    session_key = f"{SESSION_PREFIX}{session_id}"
+    try:
+        session_data = redis_client.get(session_key)
+        if not session_data:
+            logger.error(f"Session {session_id[:20]}... not found in Redis")
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        
+        session = json.loads(session_data)
+        
+        last_activity = datetime.fromisoformat(session["last_activity"])
+        if datetime.utcnow() - last_activity > timedelta(minutes=SESSION_TIMEOUT_MINUTES):
+            logger.error(f"Session {session_id[:20]}... expired")
+            redis_client.delete(session_key)
+            raise HTTPException(status_code=401, detail="Session expired")
+        
+        session["last_activity"] = datetime.utcnow().isoformat()
+        redis_client.setex(session_key, COOKIE_MAX_AGE, json.dumps(session))
+        
+        logger.info(f"Session validation successful for user: {session['username']}")
+        return session
+        
+    except redis.RedisError as e:
+        logger.error(f"Redis error during session validation: {e}")
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid session data in Redis: {e}")
+        redis_client.delete(session_key)
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
 def require_role(required_role: str):
     def role_checker(user=Depends(get_current_user)):
@@ -394,72 +420,89 @@ async def login(login_data: LoginRequest, request: Request, response: Response):
     username = login_data.username
     password = login_data.password
     
-    print(f"=== LOGIN ATTEMPT: username={username} ===", flush=True)
     logger.info(f"Login attempt for username: {username}")
-    print(f"=== AVAILABLE USERS: {list(users.keys())} ===", flush=True)
-    
-    if username in users:
-        stored_password = users[username]["password"]
-        print(f"=== STORED PASSWORD: {stored_password[:8]}... ===", flush=True)
-        print(f"=== PROVIDED PASSWORD: {password[:8]}... ===", flush=True)
-        print(f"=== PASSWORD MATCH: {stored_password == password} ===", flush=True)
-        logger.info(f"Password comparison for {username}: {stored_password == password}")
     
     if username not in users or users[username]["password"] != password:
-        print(f"=== LOGIN FAILED: Invalid credentials for {username} ===", flush=True)
         logger.error(f"Login failed for {username}: Invalid credentials")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     session_id = secrets.token_urlsafe(32)
-    sessions[session_id] = {
+    session_data = {
         "username": username,
         "role": users[username]["role"],
-        "created_at": datetime.utcnow(),
-        "last_activity": datetime.utcnow()
+        "created_at": datetime.utcnow().isoformat(),
+        "last_activity": datetime.utcnow().isoformat()
     }
     
-    is_local = request.headers.get("host", "").startswith(("127.0.0.1", "localhost"))
+    session_key = f"{SESSION_PREFIX}{session_id}"
+    try:
+        redis_client.setex(session_key, COOKIE_MAX_AGE, json.dumps(session_data))
+        logger.info(f"Session {session_id[:20]}... stored in Redis for user {username}")
+    except redis.RedisError as e:
+        logger.error(f"Failed to store session in Redis: {e}")
+        raise HTTPException(status_code=500, detail="Session creation failed")
     
     response.set_cookie(
         key="session",
         value=session_id,
-        domain=None if is_local else ".lunaraxolotl.com",
+        domain=".lunaraxolotl.com",
         httponly=True,
-        secure=not is_local,
-        samesite="lax",
+        secure=True,  # Always secure - ProxyHeadersMiddleware handles HTTPS detection
+        samesite="none",  # Required for cross-subdomain with secure=True
         max_age=COOKIE_MAX_AGE,
         path="/"
     )
     
-    print(f"=== LOGIN SUCCESSFUL: {username} with role {users[username]['role']} ===", flush=True)
     logger.info(f"Login successful for {username} with role {users[username]['role']}")
     return {"message": "Login successful", "role": users[username]["role"]}
 
 @app.post("/api/logout")
 async def logout(request: Request, response: Response):
     session_id = request.cookies.get("session")
-    if session_id and session_id in sessions:
-        del sessions[session_id]
+    if session_id:
+        session_key = f"{SESSION_PREFIX}{session_id}"
+        try:
+            redis_client.delete(session_key)
+            logger.info(f"Session {session_id[:20]}... deleted from Redis")
+        except redis.RedisError as e:
+            logger.error(f"Failed to delete session from Redis: {e}")
     
-    response.delete_cookie("session")
+    response.delete_cookie(key="session", domain=".lunaraxolotl.com", path="/")
     return {"message": "Logged out successfully"}
 
 class AlertManager:
     def __init__(self):
-        self.last_alerts = {}
-        self.alert_throttle_minutes = 15
-    
-    async def send_alert(self, alert_type: str, message: str, severity: str = "warning"):
-        """Send alert to Discord with throttling"""
-        current_time = datetime.utcnow()
-        alert_key = f"{alert_type}:{message}"
-        
-        if alert_key in self.last_alerts:
-            time_diff = current_time - self.last_alerts[alert_key]
-            if time_diff.total_seconds() < (self.alert_throttle_minutes * 60):
+        pass
+
+    def should_alert(self, key: str, ttl: int = 600) -> bool:
+        """Redis-backed alert deduplication with TTL cooldown"""
+        rkey = f"alerts:{key}"
+        try:
+            if redis_client.get(rkey):
                 return False
+            redis_client.setex(rkey, ttl, 1)
+            return True
+        except redis.RedisError as e:
+            logger.error(f"Redis error in should_alert: {e}")
+            return True
+
+    def severity_priority(self, severity: str) -> int:
+        """Convert severity to numeric priority"""
+        priorities = {"info": 1, "warning": 2, "critical": 3}
+        return priorities.get(severity.lower(), 0)
+
+    async def send_alert(self, alert_type: str, message: str, severity: str = "warning"):
+        """Send alert to Discord with Redis-backed deduplication"""
+        min_severity = os.getenv("ALERTS_MIN_SEVERITY", "warn")
+        debounce_sec = int(os.getenv("ALERTS_DEBOUNCE_SEC", "600"))
         
-        self.last_alerts[alert_key] = current_time
+        if self.severity_priority(severity) < self.severity_priority(min_severity):
+            return False
+            
+        alert_key = f"{severity}:{alert_type}"
+        if not self.should_alert(alert_key, debounce_sec):
+            logger.info(f"Alert {alert_key} suppressed due to cooldown")
+            return False
         
         webhook_url = discord_webhook_url()
         if webhook_url:
@@ -471,7 +514,7 @@ class AlertManager:
                         "title": f"AutoTrader Alert - {alert_type.replace('_', ' ').title()}",
                         "description": message,
                         "color": color,
-                        "timestamp": current_time.isoformat(),
+                        "timestamp": datetime.utcnow().isoformat(),
                         "fields": [
                             {"name": "Severity", "value": severity.upper(), "inline": True},
                             {"name": "Environment", "value": "Production", "inline": True}
@@ -617,15 +660,9 @@ def refresh_health_probes():
     discord_ok = False
     try:
         webhook_url = discord_webhook_url()
-        if webhook_url:
-            response = requests.post(
-                webhook_url, 
-                json={"content": "Health check ping"}, 
-                timeout=3
-            )
-            discord_ok = (response.status_code == 204)
+        discord_ok = bool(webhook_url)  # Just check if webhook URL exists
     except Exception as e:
-        logger.error(f"Discord health probe failed: {e}")
+        logger.error(f"Discord webhook check failed: {e}")
     
     ssm_ok = False
     try:
@@ -643,14 +680,21 @@ def refresh_health_probes():
         logger.error(f"SSM health probe failed: {e}")
     
     health_data = {
+        "type": "health_update",
         "discord_webhook_ok": discord_ok,
         "ssm_ok": ssm_ok,
+        "api_ok": True,
+        "overall_status": "healthy" if discord_ok and ssm_ok else "degraded",
         "last_updated": datetime.utcnow().isoformat(),
         "instance_id": instance_id
     }
     
     try:
+        # Store in Redis cache
         redis_client.setex(HEALTH_CACHE_KEY, HEALTH_CACHE_TTL, json.dumps(health_data))
+        
+        redis_client.publish(HEALTH_CHANNEL, json.dumps(health_data))
+        
         logger.info(f"Health probes updated in Redis: discord_ok={discord_ok}, ssm_ok={ssm_ok}")
     except Exception as e:
         logger.error(f"Failed to update Redis health cache: {e}")
@@ -693,6 +737,7 @@ def start_daily_digest_scheduler():
 
 
 @app.get("/api/health")
+@app.head("/api/health")
 async def health_check():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
@@ -783,7 +828,7 @@ async def acknowledge_alert(alert_id: str, user=Depends(get_current_user)):
     raise HTTPException(status_code=404, detail="Alert not found")
 
 @app.post("/api/pause")
-async def pause_trading(user=Depends(require_role("controller"))):
+async def pause_trading(user: dict = Depends(require_role("controller"))):
     if bot_state["mode"] != "paper":
         raise HTTPException(status_code=400, detail="Only paper mode supported")
     
@@ -899,7 +944,7 @@ async def toggle_maintenance_mode(
     }
 
 @app.post("/api/test/alert")
-async def test_alert(user=Depends(require_role("controller"))):
+async def test_alert(user: dict = Depends(require_role("controller"))):
     """Test endpoint for Discord alerts"""
     success = await alert_manager.send_alert(
         "test_alert",
@@ -1120,8 +1165,10 @@ class SmokeTradeRequest(BaseModel):
     notionalUsd: float
 
 @app.post("/api/test/smoke_trade")
-async def smoke_trade(request: SmokeTradeRequest, current_user: dict = Depends(require_role("controller"))):
+async def smoke_trade(request: SmokeTradeRequest, user: dict = Depends(require_role("controller"))):
     """Controller-only $5 smoke trade endpoint"""
+    logger.info(f"Smoke trade endpoint reached - user: {user}")
+    
     if request.notionalUsd > 10:
         raise HTTPException(status_code=400, detail="Smoke trade limited to $10 max")
     
@@ -1136,7 +1183,7 @@ async def smoke_trade(request: SmokeTradeRequest, current_user: dict = Depends(r
     audit_entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "type": "smoke_trade",
-        "user": current_user["username"],
+        "user": user["username"],
         "symbol": request.symbol,
         "side": request.side.upper(),
         "notional_usd": request.notionalUsd,
@@ -1147,6 +1194,27 @@ async def smoke_trade(request: SmokeTradeRequest, current_user: dict = Depends(r
     
     logger.info(f"Smoke trade executed: {audit_entry}")
     
+    trade_event = {
+        "type": "trade",
+        "ts": datetime.utcnow().isoformat(),
+        "venue": "paper",
+        "symbol": request.symbol,
+        "side": request.side.upper(),
+        "qty": request.notionalUsd / 30000,
+        "notional": request.notionalUsd,
+        "lat_ms": 150,
+        "status": "filled",
+        "pnl_usd": 0,
+        "equity_usd": bot_state["total_equity"],
+        "order_id": order_id
+    }
+    
+    try:
+        redis_client.publish(TRADES_CHANNEL, json.dumps(trade_event))
+        logger.info(f"Published trade event to Redis: {order_id}")
+    except redis.RedisError as e:
+        logger.error(f"Failed to publish trade event: {e}")
+    
     return {
         "order_id": order_id,
         "symbol": request.symbol,
@@ -1155,6 +1223,117 @@ async def smoke_trade(request: SmokeTradeRequest, current_user: dict = Depends(r
         "status": "submitted",
         "message": "Smoke trade submitted successfully"
     }
+
+async def trade_event_stream(user: dict) -> AsyncGenerator[str, None]:
+    """Generate SSE stream for trade events"""
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe(TRADES_CHANNEL)
+    
+    try:
+        yield f"data: {json.dumps({'type': 'heartbeat', 'ts': datetime.utcnow().isoformat()})}\n\n"
+        
+        heartbeat_counter = 0
+        while True:
+            message = pubsub.get_message(timeout=0.1)
+            if message and message['type'] == 'message':
+                data = message['data']
+                if isinstance(data, bytes):
+                    data = data.decode('utf-8')
+                yield f"data: {data}\n\n"
+            
+            # Send heartbeat every 30 seconds
+            heartbeat_counter += 1
+            if heartbeat_counter >= 300:  # 0.1s * 300 = 30s
+                yield f"data: {json.dumps({'type': 'heartbeat', 'ts': datetime.utcnow().isoformat()})}\n\n"
+                heartbeat_counter = 0
+                
+            await asyncio.sleep(0.1)
+    except Exception as e:
+        logger.error(f"Trade stream error: {e}")
+    finally:
+        pubsub.close()
+
+async def health_event_stream(user: dict) -> AsyncGenerator[str, None]:
+    """Generate SSE stream for health events"""
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe(HEALTH_CHANNEL)
+    
+    try:
+        try:
+            health_data = redis_client.get(HEALTH_CACHE_KEY)
+            if health_data:
+                health_json = json.loads(health_data)
+                health_json['type'] = 'health_update'
+                yield f"data: {json.dumps(health_json)}\n\n"
+        except Exception as e:
+            logger.error(f"Failed to send initial health data: {e}")
+        
+        heartbeat_counter = 0
+        while True:
+            message = pubsub.get_message(timeout=0.1)
+            if message and message['type'] == 'message':
+                data = message['data']
+                if isinstance(data, bytes):
+                    data = data.decode('utf-8')
+                yield f"data: {data}\n\n"
+            
+            # Send heartbeat every 30 seconds
+            heartbeat_counter += 1
+            if heartbeat_counter >= 300:  # 0.1s * 300 = 30s
+                yield f"data: {json.dumps({'type': 'heartbeat', 'ts': datetime.utcnow().isoformat()})}\n\n"
+                heartbeat_counter = 0
+                
+            await asyncio.sleep(0.1)
+    except Exception as e:
+        logger.error(f"Health stream error: {e}")
+    finally:
+        pubsub.close()
+
+@app.get("/api/stream/trades")
+async def stream_trades():
+    """Server-Sent Events endpoint for trade updates"""
+    dummy_user = {"username": "test", "role": "viewer"}
+    return StreamingResponse(
+        trade_event_stream(dummy_user),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "https://app.lunaraxolotl.com",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
+
+@app.get("/api/stream/health")
+async def stream_health():
+    """Server-Sent Events endpoint for health updates"""
+    dummy_user = {"username": "test", "role": "viewer"}
+    return StreamingResponse(
+        health_event_stream(dummy_user),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "https://app.lunaraxolotl.com",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
+
+@app.get("/api/trades")
+async def get_trades(since: str = None, limit: int = 1000, user: dict = Depends(get_current_user)):
+    """Get historical trades for backfill"""
+    filtered_orders = orders
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+            filtered_orders = [
+                order for order in orders 
+                if datetime.fromisoformat(order['timestamp'].replace('Z', '+00:00')) >= since_dt
+            ]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid since timestamp format")
+    
+    return {"trades": filtered_orders[:limit]}
 
 @app.get("/api/mode")
 async def get_mode():

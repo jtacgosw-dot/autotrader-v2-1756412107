@@ -11,6 +11,7 @@ export function Layout({ children }: LayoutProps) {
 
   const navigation = [
     { name: 'Overview', href: '/overview', icon: Activity },
+    { name: 'Live Feed', href: '/live', icon: Activity },
     { name: 'Venues & Latency', href: '/venues', icon: BarChart3 },
     { name: 'Orders & Positions', href: '/orders', icon: TrendingUp },
     { name: 'Risk & Controls', href: '/risk', icon: Shield },

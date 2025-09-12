@@ -24,7 +24,7 @@ services:
     command: >
       sh -c "
         pip install --no-cache-dir -r requirements.txt &&
-        python -m uvicorn main:app --host 0.0.0.0 --port 8080 --workers 3 --log-level info
+        python -m uvicorn main:app --host 0.0.0.0 --port 8080 --workers 1 --log-level info --proxy-headers --forwarded-allow-ips='*'
       "
     environment:
       - TRADING_MODE=paper
@@ -36,6 +36,10 @@ services:
       - ENABLE_DEBUG=false
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - ALERTS_ENABLED=true
+      - ALERTS_MIN_SEVERITY=warn
+      - ALERTS_DEBOUNCE_SEC=600
+      - ALERTS_DIGEST_CRON=0 9 * * *
     networks:
       - autotrader
     restart: unless-stopped
