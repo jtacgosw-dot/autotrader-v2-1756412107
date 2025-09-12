@@ -38,8 +38,9 @@ services:
       - REDIS_PORT=6379
       - ALERTS_ENABLED=true
       - ALERTS_MIN_SEVERITY=warn
-      - ALERTS_DEBOUNCE_SEC=600
+      - ALERTS_DEBOUNCE_SEC=900
       - ALERTS_DIGEST_CRON=0 9 * * *
+      - HEALTH_ALERTS_ENABLED=false
     networks:
       - autotrader
     restart: unless-stopped

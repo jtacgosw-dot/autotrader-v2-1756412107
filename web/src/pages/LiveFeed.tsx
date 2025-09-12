@@ -34,31 +34,58 @@ export function LiveFeed() {
   const healthEventSource = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    tradesEventSource.current = new EventSource('/api/stream/trades', {
-      withCredentials: true
-    })
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 10
+    let lastTradeTimestamp = ''
 
-    tradesEventSource.current.onopen = () => {
-      setConnected(true)
-    }
+    const connectSSE = () => {
+      tradesEventSource.current = new EventSource('/api/stream/trades', {
+        withCredentials: true
+      })
 
-    tradesEventSource.current.onmessage = (event) => {
-      try {
-        const tradeEvent: TradeEvent = JSON.parse(event.data)
-        setTrades(prev => [tradeEvent, ...prev.slice(0, 99)])
-      } catch (e) {
-        console.error('Failed to parse trade event:', e)
+      tradesEventSource.current.onopen = () => {
+        setConnected(true)
+        reconnectAttempts = 0
+      }
+
+      tradesEventSource.current.onmessage = (event) => {
+        try {
+          const tradeEvent: TradeEvent = JSON.parse(event.data)
+          if (tradeEvent.ts) {
+            lastTradeTimestamp = tradeEvent.ts
+          }
+          setTrades(prev => [tradeEvent, ...prev.slice(0, 99)])
+        } catch (e) {
+          console.error('Failed to parse trade event:', e)
+        }
+      }
+
+      tradesEventSource.current.onerror = () => {
+        setConnected(false)
+        tradesEventSource.current?.close()
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++
+          const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000) + Math.random() * 1000
+          
+          setTimeout(() => {
+            if (lastTradeTimestamp) {
+              fetch(`/api/trades?since=${lastTradeTimestamp}&limit=50`, { credentials: 'include' })
+                .then(res => res.json())
+                .then(data => {
+                  if (data.trades && data.trades.length > 0) {
+                    setTrades(prev => [...data.trades.reverse(), ...prev.slice(0, 99)])
+                  }
+                })
+                .catch(console.error)
+            }
+            connectSSE()
+          }, backoffDelay)
+        }
       }
     }
 
-    tradesEventSource.current.onerror = () => {
-      setConnected(false)
-      setTimeout(() => {
-        if (tradesEventSource.current?.readyState === EventSource.CLOSED) {
-          window.location.reload()
-        }
-      }, 5000)
-    }
+    connectSSE()
 
     healthEventSource.current = new EventSource('/api/stream/health', {
       withCredentials: true
