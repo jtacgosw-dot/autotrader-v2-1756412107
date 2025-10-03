@@ -45,6 +45,40 @@ services:
       - autotrader
     restart: unless-stopped
 
+  discord_bot:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./discord_bot:/app
+      - ./alerts:/app/alerts
+    command: >
+      sh -c "
+        pip install --no-cache-dir -r requirements.txt &&
+        python bot.py
+      "
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
+      - API_BASE_URL=http://api:8080
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ALERTS_ENABLE=${ALERTS_ENABLE:-true}
+      - ALERTS_ENV=${ALERTS_ENV:-prod}
+      - ALERTS_DEDUPE_TTL_SEC=${ALERTS_DEDUPE_TTL_SEC:-900}
+      - ALERTS_COOLDOWN_SEC=${ALERTS_COOLDOWN_SEC:-300}
+      - ALERTS_AGG_WINDOW_SEC=${ALERTS_AGG_WINDOW_SEC:-60}
+      - ALERTS_MAX_POSTS_PER_MIN=${ALERTS_MAX_POSTS_PER_MIN:-20}
+      - ALERTS_HEARTBEAT_INTERVAL_MIN=${ALERTS_HEARTBEAT_INTERVAL_MIN:-30}
+      - ALERTS_CHANNEL_INFO=${ALERTS_CHANNEL_INFO:-#alerts}
+      - ALERTS_CHANNEL_WARN=${ALERTS_CHANNEL_WARN:-#alerts}
+      - ALERTS_CHANNEL_CRIT=${ALERTS_CHANNEL_CRIT:-#pages}
+    depends_on:
+      - api
+      - redis
+    networks:
+      - autotrader
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:latest
     ports:
