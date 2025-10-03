@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Activity, BarChart3, Shield, AlertTriangle, TrendingUp, LogOut, User } from 'lucide-react'
+import { Activity, BarChart3, Shield, AlertTriangle, TrendingUp, LogOut, User, HelpCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { Badge } from './ui/badge'
@@ -82,6 +82,27 @@ export function Layout({ children }: LayoutProps) {
                     <Badge variant={user.role === 'controller' ? 'default' : 'secondary'}>
                       {user.role}
                     </Badge>
+                  </div>
+                  <div className="relative group">
+                    <button className="text-muted-foreground hover:text-foreground">
+                      <HelpCircle className="w-4 h-4" />
+                    </button>
+                    <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                      <div className="p-4 space-y-3">
+                        <div className="text-sm font-semibold">Keyboard Shortcuts</div>
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <div><kbd className="px-1 py-0.5 bg-muted rounded">g</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded">v</kbd> → Venues</div>
+                          <div><kbd className="px-1 py-0.5 bg-muted rounded">g</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded">o</kbd> → Orders</div>
+                          <div><kbd className="px-1 py-0.5 bg-muted rounded">g</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded">r</kbd> → Risk</div>
+                          <div><kbd className="px-1 py-0.5 bg-muted rounded">g</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded">a</kbd> → Alerts</div>
+                          <div><kbd className="px-1 py-0.5 bg-muted rounded">g</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded">l</kbd> → Live</div>
+                        </div>
+                        <div className="border-t border-border pt-2 space-y-1">
+                          <a href={`${import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'}/api/docs`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-500 hover:underline">API Documentation</a>
+                          <a href="https://github.com/jtacgosw-dot/autotrader-v2-1756412107" target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-500 hover:underline">GitHub Repository</a>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <button
                     onClick={handleLogout}

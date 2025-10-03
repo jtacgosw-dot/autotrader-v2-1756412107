@@ -206,10 +206,16 @@ export function Overview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+              <button 
+                onClick={() => window.open(import.meta.env.VITE_GRAFANA_URL || 'http://localhost:3000', '_blank')}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
                 View Grafana Dashboard
               </button>
-              <button className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+              <button 
+                onClick={() => window.open(`${import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'}/api/healthz`, '_blank')}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
                 Check API Health
               </button>
             </div>

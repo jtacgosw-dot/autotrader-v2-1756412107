@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Live Feed', () => {
   test('Live page is accessible after login', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('lastSeenVersion', '2.1.0')
+    })
+
     await page.route('**/api/login', async (route) => {
       await route.fulfill({
         status: 200,

@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
+import { WhatsNewModal } from './components/WhatsNewModal'
 import './App.css'
 
 const Overview = lazy(() => import('./pages/Overview').then(m => ({ default: m.Overview })))
@@ -16,6 +17,7 @@ const Alerts = lazy(() => import('./pages/Alerts').then(m => ({ default: m.Alert
 function App() {
   return (
     <AuthProvider>
+      <WhatsNewModal />
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />

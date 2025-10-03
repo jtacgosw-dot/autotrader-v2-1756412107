@@ -29,22 +29,29 @@ export function LiveFeed() {
   const [trades, setTrades] = useState<TradeEvent[]>([])
   const [health, setHealth] = useState<HealthEvent | null>(null)
   const [connected, setConnected] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [reconnectCountdown, setReconnectCountdown] = useState(0)
   const [filter, setFilter] = useState({ venue: 'all', symbol: 'all' })
   const tradesEventSource = useRef<EventSource | null>(null)
   const healthEventSource = useRef<EventSource | null>(null)
 
   useEffect(() => {
     let reconnectAttempts = 0
+    let healthReconnectAttempts = 0
     const maxReconnectAttempts = 10
     let lastTradeTimestamp = ''
+    let reconnectTimer: NodeJS.Timeout | null = null
 
     const connectSSE = () => {
-      tradesEventSource.current = new EventSource('/api/stream/trades', {
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+      
+      tradesEventSource.current = new EventSource(`${apiBase}/api/stream/trades`, {
         withCredentials: true
       })
 
       tradesEventSource.current.onopen = () => {
         setConnected(true)
+        setReconnecting(false)
         reconnectAttempts = 0
       }
 
@@ -54,7 +61,7 @@ export function LiveFeed() {
           if (tradeEvent.ts) {
             lastTradeTimestamp = tradeEvent.ts
           }
-          setTrades(prev => [tradeEvent, ...prev.slice(0, 99)])
+          setTrades(prev => [tradeEvent, ...prev.slice(0, 999)])
         } catch (e) {
           console.error('Failed to parse trade event:', e)
         }
@@ -66,46 +73,75 @@ export function LiveFeed() {
         
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++
+          setReconnecting(true)
           const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000) + Math.random() * 1000
           
+          setReconnectCountdown(Math.floor(backoffDelay / 1000))
+          if (reconnectTimer) clearInterval(reconnectTimer)
+          reconnectTimer = setInterval(() => {
+            setReconnectCountdown(prev => Math.max(0, prev - 1))
+          }, 1000)
+          
           setTimeout(() => {
+            if (reconnectTimer) clearInterval(reconnectTimer)
             if (lastTradeTimestamp) {
-              fetch(`/api/trades?since=${lastTradeTimestamp}&limit=50`, { credentials: 'include' })
+              const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+              fetch(`${apiBase}/api/trades?since=${lastTradeTimestamp}&limit=50`, { credentials: 'include' })
                 .then(res => res.json())
                 .then(data => {
                   if (data.trades && data.trades.length > 0) {
-                    setTrades(prev => [...data.trades.reverse(), ...prev.slice(0, 99)])
+                    setTrades(prev => [...data.trades.reverse(), ...prev.slice(0, 999)])
                   }
                 })
                 .catch(console.error)
             }
             connectSSE()
           }, backoffDelay)
+        } else {
+          setReconnecting(false)
+        }
+      }
+    }
+
+    const connectHealthSSE = () => {
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+      
+      healthEventSource.current = new EventSource(`${apiBase}/api/stream/health`, {
+        withCredentials: true
+      })
+
+      healthEventSource.current.onmessage = (event) => {
+        try {
+          const healthEvent: HealthEvent = JSON.parse(event.data)
+          setHealth(healthEvent)
+          healthReconnectAttempts = 0
+        } catch (e) {
+          console.error('Failed to parse health event:', e)
+        }
+      }
+
+      healthEventSource.current.onerror = () => {
+        healthEventSource.current?.close()
+        
+        if (healthReconnectAttempts < maxReconnectAttempts) {
+          healthReconnectAttempts++
+          const backoffDelay = Math.min(1000 * Math.pow(2, healthReconnectAttempts), 30000) + Math.random() * 1000
+          setTimeout(connectHealthSSE, backoffDelay)
         }
       }
     }
 
     connectSSE()
+    connectHealthSSE()
 
-    healthEventSource.current = new EventSource('/api/stream/health', {
-      withCredentials: true
-    })
-
-    healthEventSource.current.onmessage = (event) => {
-      try {
-        const healthEvent: HealthEvent = JSON.parse(event.data)
-        setHealth(healthEvent)
-      } catch (e) {
-        console.error('Failed to parse health event:', e)
-      }
-    }
-
-    fetch('/api/trades?limit=50', { credentials: 'include' })
+    const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+    fetch(`${apiBase}/api/trades?limit=50`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => setTrades(data.trades || []))
       .catch(console.error)
 
     return () => {
+      if (reconnectTimer) clearInterval(reconnectTimer)
       tradesEventSource.current?.close()
       healthEventSource.current?.close()
     }
@@ -122,8 +158,8 @@ export function LiveFeed() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Live Feed</h1>
         <div className="flex items-center space-x-4">
-          <Badge variant={connected ? "default" : "destructive"}>
-            {connected ? "Connected" : "Disconnected"}
+          <Badge variant={connected ? "default" : reconnecting ? "secondary" : "destructive"}>
+            {connected ? "Connected" : reconnecting ? `Reconnecting in ${reconnectCountdown}s` : "Disconnected"}
           </Badge>
           <div className="flex space-x-2">
             <select 

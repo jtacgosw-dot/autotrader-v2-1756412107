@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Authentication', () => {
   test('viewer can login and navigate but not access Risk page', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('lastSeenVersion', '2.1.0')
+    })
+
     await page.route('**/api/login', async (route) => {
       await route.fulfill({
         status: 200,
@@ -43,6 +47,10 @@ test.describe('Authentication', () => {
   })
 
   test('controller can login and access all pages including Risk', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('lastSeenVersion', '2.1.0')
+    })
+
     await page.route('**/api/login', async (route) => {
       await route.fulfill({
         status: 200,

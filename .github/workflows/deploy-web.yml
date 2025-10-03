@@ -82,6 +82,8 @@ jobs:
       
       - name: Invalidate CloudFront
         run: |
-          aws cloudfront create-invalidation \
-            --distribution-id E2Q821S151MNYL \
-            --paths "/*"
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='autotrader-web-hub'].Id" --output text)
+          if [ -z "$DISTRIBUTION_ID" ]; then
+            DISTRIBUTION_ID="E2Q821S151MNYL"
+          fi
+          aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"

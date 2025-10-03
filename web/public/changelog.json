@@ -1,0 +1,29 @@
+{
+  "releases": [
+    {
+      "version": "2.1.0",
+      "date": "2025-10-03",
+      "title": "Web Hub Authentication & Testing",
+      "highlights": [
+        "Added role-based authentication (viewer/controller)",
+        "Implemented Playwright E2E testing",
+        "Added keyboard shortcuts (g+v, g+o, g+r, g+a, g+l)",
+        "Integrated Sentry error tracking",
+        "Added build metadata in footer"
+      ]
+    },
+    {
+      "version": "2.0.0",
+      "date": "2025-08-28",
+      "title": "AlertManager & Discord Bot",
+      "highlights": [
+        "Comprehensive AlertManager with Redis deduplication",
+        "Discord bot with slash commands",
+        "Incident lifecycle management (open/update/resolve)",
+        "Health check spam elimination",
+        "Daily digest and heartbeat features"
+      ]
+    }
+  ],
+  "last_updated": "2025-10-03T19:00:00Z"
+}
