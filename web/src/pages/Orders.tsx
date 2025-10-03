@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { FixedSizeList as List } from 'react-window'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
 import { TrendingUp, Download, RefreshCw } from 'lucide-react'
@@ -221,51 +222,59 @@ export function Orders() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Orders (Last 20)</CardTitle>
+          <CardTitle>Recent Orders (Last 1000)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2">Time</th>
-                  <th className="text-left py-2">Venue</th>
-                  <th className="text-left py-2">Pair</th>
-                  <th className="text-left py-2">Side</th>
-                  <th className="text-right py-2">Size</th>
-                  <th className="text-right py-2">Price</th>
-                  <th className="text-right py-2">Fees</th>
-                  <th className="text-right py-2">Slippage</th>
-                  <th className="text-right py-2">Latency</th>
-                  <th className="text-center py-2">Mode</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentOrders.map((order) => (
-                  <tr key={order.id} className="border-b">
-                    <td className="py-2">{new Date(order.timestamp).toLocaleTimeString()}</td>
-                    <td className="py-2 capitalize">{order.venue}</td>
-                    <td className="py-2">{order.pair}</td>
-                    <td className="py-2">
-                      <Badge variant={order.side === 'BUY' ? 'default' : 'destructive'} className="text-xs">
-                        {order.side}
-                      </Badge>
-                    </td>
-                    <td className="py-2 text-right">{order.size}</td>
-                    <td className="py-2 text-right">${order.price.toLocaleString()}</td>
-                    <td className="py-2 text-right">${order.fees.toFixed(2)}</td>
-                    <td className="py-2 text-right">{order.slippageBps} bps</td>
-                    <td className="py-2 text-right">{order.latencyMs}ms</td>
-                    <td className="py-2 text-center">
-                      <Badge variant="secondary" className="text-xs">
-                        {order.mode}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {recentOrders.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No orders yet</div>
+          ) : (
+            <>
+              <div className="mb-2 grid grid-cols-10 gap-2 text-xs font-semibold border-b pb-2">
+                <div>Time</div>
+                <div>Venue</div>
+                <div>Pair</div>
+                <div>Side</div>
+                <div className="text-right">Size</div>
+                <div className="text-right">Price</div>
+                <div className="text-right">Fees</div>
+                <div className="text-right">Slippage</div>
+                <div className="text-right">Latency</div>
+                <div className="text-center">Mode</div>
+              </div>
+              <List
+                height={400}
+                itemCount={recentOrders.length}
+                itemSize={40}
+                width="100%"
+              >
+                {({ index, style }) => {
+                  const order = recentOrders[index]
+                  return (
+                    <div key={order.id} style={style} className="grid grid-cols-10 gap-2 text-xs items-center border-b py-2">
+                      <div>{new Date(order.timestamp).toLocaleTimeString()}</div>
+                      <div className="capitalize">{order.venue}</div>
+                      <div>{order.pair}</div>
+                      <div>
+                        <Badge variant={order.side === 'BUY' ? 'default' : 'destructive'} className="text-xs">
+                          {order.side}
+                        </Badge>
+                      </div>
+                      <div className="text-right">{order.size}</div>
+                      <div className="text-right">${order.price.toLocaleString()}</div>
+                      <div className="text-right">${order.fees.toFixed(2)}</div>
+                      <div className="text-right">{order.slippageBps} bps</div>
+                      <div className="text-right">{order.latencyMs}ms</div>
+                      <div className="text-center">
+                        <Badge variant="secondary" className="text-xs">
+                          {order.mode}
+                        </Badge>
+                      </div>
+                    </div>
+                  )
+                }}
+              </List>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
