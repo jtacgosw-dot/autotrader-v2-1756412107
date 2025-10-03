@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 import os
+import sys
 from datetime import datetime, timedelta, time as datetime_time
 import json
 import secrets
@@ -19,6 +20,9 @@ import time
 import redis
 import re
 from typing import AsyncGenerator
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from alerts.manager import AlertManager as NewAlertManager
 
 class RedactedJSONFormatter(logging.Formatter):
     """JSON formatter that redacts sensitive information"""
@@ -470,76 +474,24 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="session", domain=".lunaraxolotl.com", path="/")
     return {"message": "Logged out successfully"}
 
-class AlertManager:
-    def __init__(self):
-        pass
-
-    def should_alert(self, key: str, ttl: int = 600) -> bool:
-        """Redis-backed alert deduplication with TTL cooldown"""
-        rkey = f"alerts:{key}"
-        try:
-            if redis_client.get(rkey):
-                return False
-            redis_client.setex(rkey, ttl, 1)
-            return True
-        except redis.RedisError as e:
-            logger.error(f"Redis error in should_alert: {e}")
-            return True
-
-    def severity_priority(self, severity: str) -> int:
-        """Convert severity to numeric priority"""
-        priorities = {"info": 1, "warning": 2, "critical": 3}
-        return priorities.get(severity.lower(), 0)
-
-    async def send_alert(self, alert_type: str, message: str, severity: str = "warning"):
-        """Send alert to Discord with Redis-backed deduplication"""
-        min_severity = os.getenv("ALERTS_MIN_SEVERITY", "warn")
-        debounce_sec = int(os.getenv("ALERTS_DEBOUNCE_SEC", "600"))
-        
-        if self.severity_priority(severity) < self.severity_priority(min_severity):
-            return False
-            
-        alert_key = f"{severity}:{alert_type}"
-        if not self.should_alert(alert_key, debounce_sec):
-            logger.info(f"Alert {alert_key} suppressed due to cooldown")
-            return False
-        
-        webhook_url = discord_webhook_url()
-        if webhook_url:
-            try:
-                color = {"critical": 0xFF0000, "warning": 0xFFA500, "info": 0x0099FF}.get(severity, 0x808080)
-                
-                payload = {
-                    "embeds": [{
-                        "title": f"AutoTrader Alert - {alert_type.replace('_', ' ').title()}",
-                        "description": message,
-                        "color": color,
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "fields": [
-                            {"name": "Severity", "value": severity.upper(), "inline": True},
-                            {"name": "Environment", "value": "Production", "inline": True}
-                        ]
-                    }]
-                }
-                
-                response = requests.post(webhook_url, json=payload, timeout=10)
-                success = response.status_code == 204
-                logger.info(f"Alert sent to Discord: {alert_type}, status={response.status_code}")
-                return success
-                
-            except Exception as e:
-                logger.error(f"Failed to send Discord alert: {e}")
-                return False
-        return False
-
-alert_manager = AlertManager()
+try:
+    webhook_url = discord_webhook_url()
+    if webhook_url:
+        alert_manager = NewAlertManager(redis_client, webhook_url)
+        logger.info("Initialized new AlertManager with Redis and Discord webhook")
+    else:
+        alert_manager = None
+        logger.warning("AlertManager not initialized - Discord webhook URL not available")
+except Exception as e:
+    logger.error(f"Failed to initialize AlertManager: {e}")
+    alert_manager = None
 
 class DailyDigest:
     def __init__(self, alert_manager):
         self.alert_manager = alert_manager
         self.digest_time = datetime_time(9, 0)
         self.last_digest_date = None
-        
+    
     async def send_daily_digest(self):
         """Send daily digest at 9:00 UTC with real 24h metrics"""
         current_date = datetime.utcnow().date()
@@ -579,37 +531,47 @@ class DailyDigest:
                 
                 current_time = datetime.utcnow()
                 
-                digest_message = f"""📊 **Daily AutoTrader Digest** - {current_date}
-
-**System Status**: {'🟢 Healthy' if health_data.get('overall_status') == 'healthy' else '🔴 Issues'}
-**Discord Webhook**: {'✅' if health_data.get('discord_webhook_ok') else '❌'}
-**SSM Connectivity**: {'✅' if health_data.get('ssm_ok') else '❌'}
-**Redis Cache**: {'✅' if health_data.get('cache_source') == 'redis' else '❌'}
-
-**24h Summary** ({metrics_source}):
-• System Uptime: {uptime:.1f}%
-• Avg Response Time: {avg_latency:.0f}ms
-• Error Rate: {error_rate:.2f}%
-• Health Checks: Automated via Redis cache
-• Security: WAF active, CSP enforced
-
-**Production Enhancements**:
-• Debug endpoints: Feature-flagged (ENABLE_DEBUG=false)
-• Credential rotation: Automated for 4 secrets
-• IAM policies: Least-privilege restrictions active
-• Monitoring: Synthetics canary running every 5min
-
-**Trading Status**: Paper Mode Active 📝
-**Kill Switch**: Inactive ✅
-
-Generated at {current_time.strftime('%H:%M')} UTC | Next digest: 09:00 UTC
-"""
+                digest_embed = {
+                    "title": "📊 Daily AutoTrader Digest",
+                    "description": f"System summary for **{current_date}**",
+                    "color": 0x0099FF if health_data.get('overall_status') == 'healthy' else 0xFF0000,
+                    "timestamp": current_time.isoformat(),
+                    "fields": [
+                        {
+                            "name": "🟢 System Status",
+                            "value": '✅ Healthy' if health_data.get('overall_status') == 'healthy' else '🔴 Issues Detected',
+                            "inline": False
+                        },
+                        {
+                            "name": "📡 Connectivity",
+                            "value": f"Discord: {'✅' if health_data.get('discord_webhook_ok') else '❌'}\nSSM: {'✅' if health_data.get('ssm_ok') else '❌'}\nRedis: {'✅' if health_data.get('cache_source') == 'redis' else '❌'}",
+                            "inline": True
+                        },
+                        {
+                            "name": "📈 24h Performance",
+                            "value": f"Uptime: `{uptime:.1f}%`\nAvg Latency: `{avg_latency:.0f}ms`\nError Rate: `{error_rate:.2f}%`",
+                            "inline": True
+                        },
+                        {
+                            "name": "🔒 Security",
+                            "value": "WAF Active ✅\nCSP Enforced ✅\nHealth Checks Automated ✅",
+                            "inline": False
+                        },
+                        {
+                            "name": "💼 Trading Status",
+                            "value": f"Mode: `Paper Trading` 📝\nKill Switch: `Inactive` ✅",
+                            "inline": False
+                        }
+                    ],
+                    "footer": {
+                        "text": f"Data source: {metrics_source} | Next digest: 09:00 UTC"
+                    }
+                }
                 
-                await self.alert_manager.send_alert(
-                    "daily_digest",
-                    digest_message,
-                    "info"
-                )
+                webhook_url = discord_webhook_url()
+                if webhook_url:
+                    payload = {"embeds": [digest_embed]}
+                    requests.post(webhook_url, json=payload, timeout=10)
                 
                 self.last_digest_date = current_date
                 logger.info(f"Daily digest sent with 24h metrics at {current_time.strftime('%H:%M')} UTC")
@@ -695,7 +657,7 @@ def refresh_health_probes():
         
         redis_client.publish(HEALTH_CHANNEL, json.dumps(health_data))
         
-        logger.info(f"Health probes updated in Redis: discord_ok={discord_ok}, ssm_ok={ssm_ok}")
+        logger.debug(f"Health probes updated in Redis: discord_ok={discord_ok}, ssm_ok={ssm_ok}")
     except Exception as e:
         logger.error(f"Failed to update Redis health cache: {e}")
 
@@ -704,9 +666,9 @@ def background_health_monitor():
     logger.info("Background health monitor thread started with Redis")
     while True:
         try:
-            logger.info("Running health probe refresh to Redis...")
+            logger.debug("Running health probe refresh to Redis...")
             refresh_health_probes()
-            logger.info("Health probe refresh completed, sleeping 60s")
+            logger.debug("Health probe refresh completed, sleeping 60s")
             time.sleep(60)
         except Exception as e:
             logger.error(f"Background health monitor error: {e}")
@@ -728,11 +690,32 @@ def daily_digest_task():
         except Exception as e:
             logger.error(f"Daily digest task error: {e}")
             time.sleep(60)
+def heartbeat_task():
+    """Background thread for sending heartbeats"""
+    if not alert_manager:
+        return
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    while True:
+        try:
+            loop.run_until_complete(alert_manager.send_heartbeat())
+        except Exception as e:
+            logger.error(f"Heartbeat task error: {e}")
+        
+        interval_sec = alert_manager.heartbeat_interval * 60
+        time.sleep(interval_sec)
+
 def start_daily_digest_scheduler():
     """Start the daily digest scheduler thread"""
     digest_thread = threading.Thread(target=daily_digest_task, name="DailyDigestThread", daemon=True)
     digest_thread.start()
     logger.info("Daily digest scheduler thread started")
+    
+    heartbeat_thread = threading.Thread(target=heartbeat_task, name="HeartbeatThread", daemon=True)
+    heartbeat_thread.start()
+    logger.info("Heartbeat task started")
 
 
 
@@ -818,6 +801,22 @@ async def get_positions():
 async def get_alerts():
     return alerts
 
+@app.get("/api/incidents")
+async def get_incidents():
+    """Get currently open incidents from AlertManager"""
+    if not alert_manager:
+        return {"incidents": [], "message": "AlertManager not initialized"}
+    
+    try:
+        incidents = alert_manager.get_open_incidents()
+        return {
+            "incidents": incidents,
+            "count": len(incidents)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get incidents: {e}")
+        return {"incidents": [], "error": str(e)}
+
 @app.post("/api/alerts/{alert_id}/acknowledge")
 async def acknowledge_alert(alert_id: str, user=Depends(get_current_user)):
     """Acknowledge an alert"""
@@ -835,11 +834,14 @@ async def pause_trading(user: dict = Depends(require_role("controller"))):
     bot_state["paused"] = True
     bot_state["status"] = "paused"
     
-    await alert_manager.send_alert(
-        "trading_paused", 
-        f"Trading paused by user {user['username']}", 
-        "warning"
-    )
+    if alert_manager:
+        await alert_manager.send(
+            type="trading_paused",
+            severity="warning",
+            key="trading_paused",
+            title="Trading Paused",
+            body=f"Trading paused by user {user['username']}"
+        )
     
     audit_log = {
         "ts": datetime.utcnow().isoformat(),
@@ -864,11 +866,14 @@ async def resume_trading(user=Depends(require_role("controller"))):
     bot_state["paused"] = False
     bot_state["status"] = "running"
     
-    await alert_manager.send_alert(
-        "trading_resumed", 
-        f"Trading resumed by user {user['username']}", 
-        "info"
-    )
+    if alert_manager:
+        await alert_manager.send(
+            type="trading_resumed",
+            severity="info",
+            key="trading_resumed",
+            title="Trading Resumed",
+            body=f"Trading resumed by user {user['username']}"
+        )
     
     audit_log = {
         "ts": datetime.utcnow().isoformat(),
@@ -923,20 +928,26 @@ async def toggle_maintenance_mode(
     if enabled:
         bot_state["paused"] = True
         bot_state["status"] = "maintenance"
-        await alert_manager.send_alert(
-            "maintenance_mode_enabled",
-            f"Maintenance mode enabled by {user['username']}",
-            "warning"
-        )
+        if alert_manager:
+            await alert_manager.send(
+                type="maintenance",
+                severity="warning",
+                key="maintenance_mode_enabled",
+                title="Maintenance Mode Enabled",
+                body=f"Maintenance mode enabled by {user['username']}"
+            )
     else:
         if not bot_state["kill_switch_active"]:
             bot_state["paused"] = False
             bot_state["status"] = "running"
-        await alert_manager.send_alert(
-            "maintenance_mode_disabled",
-            f"Maintenance mode disabled by {user['username']}",
-            "info"
-        )
+        if alert_manager:
+            await alert_manager.send(
+                type="maintenance",
+                severity="info",
+                key="maintenance_mode_disabled",
+                title="Maintenance Mode Disabled",
+                body=f"Maintenance mode disabled by {user['username']}"
+            )
     
     return {
         "maintenance_mode": enabled,
@@ -946,11 +957,15 @@ async def toggle_maintenance_mode(
 @app.post("/api/test/alert")
 async def test_alert(user: dict = Depends(require_role("controller"))):
     """Test endpoint for Discord alerts"""
-    success = await alert_manager.send_alert(
-        "test_alert",
-        f"Hello from AutoTrader - Test alert triggered by {user['username']} at {datetime.utcnow().isoformat()}",
-        "info"
-    )
+    success = False
+    if alert_manager:
+        success = await alert_manager.send(
+            type="test",
+            severity="info",
+            key="test_alert",
+            title="Test Alert",
+            body=f"Hello from AutoTrader - Test alert triggered by {user['username']} at {datetime.utcnow().isoformat()}"
+        )
     return {"message": "Test alert sent", "success": success}
 
 @app.get("/api/export/orders")
@@ -1035,60 +1050,84 @@ async def trigger_tg_health_alert(healthy: bool = True):
     """Trigger target group health alert"""
     severity = "info" if healthy else "critical"
     message = f"Target group is now {'healthy' if healthy else 'unhealthy'}"
-    await alert_manager.send_alert("tg_health", message, severity)
+    if alert_manager:
+        await alert_manager.send(
+            type="health",
+            severity=severity,
+            key="tg_health",
+            title="Target Group Health",
+            body=message
+        )
     return {"message": f"TG health alert sent: {message}"}
 
 @app.post("/api/alerts/trigger/latency")
 async def trigger_latency_alert(venue: str, p95_ms: int):
     """Trigger high latency alert"""
-    if p95_ms > 300:
-        await alert_manager.send_alert(
-            "high_latency",
-            f"{venue} p95 latency is {p95_ms}ms (threshold: 300ms)",
-            "warning"
+    if p95_ms > 300 and alert_manager:
+        await alert_manager.send(
+            type="latency",
+            severity="warning",
+            key=f"high_latency_{venue}",
+            title="High Latency Alert",
+            body=f"{venue} p95 latency is {p95_ms}ms (threshold: 300ms)",
+            tags={"venue": venue, "p95_ms": str(p95_ms)}
         )
     return {"message": f"Latency alert checked for {venue}: {p95_ms}ms"}
 
 @app.post("/api/alerts/trigger/5xx-spike")
 async def trigger_5xx_spike_alert(count: int, timeframe: str = "5min"):
     """Trigger 5xx error spike alert"""
-    if count > 10:
-        await alert_manager.send_alert(
-            "5xx_spike",
-            f"{count} 5xx errors in {timeframe} (threshold: 10)",
-            "critical"
+    if count > 10 and alert_manager:
+        await alert_manager.send(
+            type="infra",
+            severity="critical",
+            key="5xx_spike",
+            title="5xx Error Spike",
+            body=f"{count} 5xx errors in {timeframe} (threshold: 10)",
+            tags={"count": str(count), "timeframe": timeframe}
         )
     return {"message": f"5xx spike alert checked: {count} errors"}
 
 @app.post("/api/alerts/trigger/container-restart")
 async def trigger_container_restart_alert(container: str):
     """Trigger container restart alert"""
-    await alert_manager.send_alert(
-        "container_restart",
-        f"Container {container} has restarted",
-        "warning"
-    )
+    if alert_manager:
+        await alert_manager.send(
+            type="infra",
+            severity="warning",
+            key=f"container_restart_{container}",
+            title="Container Restart",
+            body=f"Container {container} has restarted",
+            tags={"container": container}
+        )
     return {"message": f"Container restart alert sent for {container}"}
 
 @app.post("/api/alerts/trigger/low-disk")
 async def trigger_low_disk_alert(usage_percent: int):
     """Trigger low disk space alert"""
-    if usage_percent > 85:
-        await alert_manager.send_alert(
-            "low_disk",
-            f"Disk usage is {usage_percent}% (threshold: 85%)",
-            "warning"
+    if usage_percent > 85 and alert_manager:
+        await alert_manager.send(
+            type="infra",
+            severity="warning",
+            key="low_disk",
+            title="Low Disk Space",
+            body=f"Disk usage is {usage_percent}% (threshold: 85%)",
+            tags={"usage_percent": str(usage_percent)}
         )
     return {"message": f"Low disk alert checked: {usage_percent}%"}
 
 @app.post("/api/alerts/trigger/deploy-complete")
 async def trigger_deploy_complete_alert(component: str, version: str = "latest"):
     """Trigger deployment complete alert"""
-    await alert_manager.send_alert(
-        "deploy_complete",
-        f"{component} deployment completed successfully (version: {version})",
-        "info"
-    )
+    if alert_manager:
+        await alert_manager.send(
+            type="infra",
+            severity="info",
+            key=f"deploy_complete_{component}",
+            title="Deployment Complete",
+            body=f"{component} deployment completed successfully (version: {version})",
+            tags={"component": component, "version": version}
+        )
     return {"message": f"Deploy complete alert sent for {component}"}
 
 def check_debug_enabled():
