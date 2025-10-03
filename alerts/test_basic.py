@@ -32,24 +32,21 @@ def alert_manager(mock_redis):
     return AlertManager(mock_redis, "https://discord.com/webhook/test")
 
 
-@pytest.mark.asyncio
-async def test_severity_color(alert_manager):
+def test_severity_color(alert_manager):
     """Test severity color mapping"""
     assert alert_manager._severity_color("info") == 0x808080
     assert alert_manager._severity_color("warning") == 0xFFA500
     assert alert_manager._severity_color("critical") == 0xFF0000
 
 
-@pytest.mark.asyncio
-async def test_severity_emoji(alert_manager):
+def test_severity_emoji(alert_manager):
     """Test severity emoji mapping"""
     assert alert_manager._severity_emoji("info") == "ℹ️"
     assert alert_manager._severity_emoji("warning") == "⚠️"
     assert alert_manager._severity_emoji("critical") == "🚨"
 
 
-@pytest.mark.asyncio
-async def test_mute_unmute(alert_manager, mock_redis):
+def test_mute_unmute(alert_manager, mock_redis):
     """Test mute/unmute functionality"""
     alert_manager.mute("warning", 30)
     mock_redis.setex.assert_called_once()
@@ -58,16 +55,14 @@ async def test_mute_unmute(alert_manager, mock_redis):
     mock_redis.delete.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_get_open_incidents_empty(alert_manager, mock_redis):
+def test_get_open_incidents_empty(alert_manager, mock_redis):
     """Test getting open incidents when none exist"""
     mock_redis.keys.return_value = []
     incidents = alert_manager.get_open_incidents()
     assert incidents == []
 
 
-@pytest.mark.asyncio
-async def test_redis_keys_generation(alert_manager):
+def test_redis_keys_generation(alert_manager):
     """Test Redis key generation"""
     keys = alert_manager._get_redis_keys("health", "test-key")
     assert "alert:prod:health:test-key:open" in keys["open"]
