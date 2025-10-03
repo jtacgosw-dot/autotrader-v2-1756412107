@@ -2,6 +2,22 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Authentication', () => {
   test('viewer can login and navigate but not access Risk page', async ({ page }) => {
+    await page.route('**/api/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ role: 'viewer' })
+      })
+    })
+    
+    await page.route('**/api/debug/whoami', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: 'viewer', role: 'viewer' })
+      })
+    })
+    
     await page.goto('/login')
     
     await page.fill('input[id="username"]', 'viewer')
@@ -27,6 +43,38 @@ test.describe('Authentication', () => {
   })
 
   test('controller can login and access all pages including Risk', async ({ page }) => {
+    await page.route('**/api/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ role: 'controller' })
+      })
+    })
+    
+    await page.route('**/api/debug/whoami', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ user: 'controller', role: 'controller' })
+      })
+    })
+    
+    await page.route('**/api/pause', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'paused' })
+      })
+    })
+    
+    await page.route('**/api/resume', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'resumed' })
+      })
+    })
+    
     await page.goto('/login')
     
     await page.fill('input[id="username"]', 'controller')
