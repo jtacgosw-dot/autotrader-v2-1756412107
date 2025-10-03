@@ -32,7 +32,15 @@ jobs:
       - name: Install dependencies
         run: cd web && npm ci
       
+      - name: Run tests
+        run: cd web && npx playwright install --with-deps && npm run test
+      
       - name: Build
+        env:
+          VITE_API_BASE: https://lunaraxolotl.com
+          VITE_ENV: prod
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp }}
         run: cd web && npm run build
       
       - name: Deploy to S3
