@@ -56,12 +56,12 @@ export function WhatsNewModal() {
             <div key={release.version} className="border-l-4 border-blue-500 pl-4">
               <div className="flex items-center space-x-2 mb-2">
                 <Badge variant="default">{release.version}</Badge>
-                <span className="text-sm text-muted-foreground">{release.date}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">{release.date}</span>
               </div>
-              <h3 className="text-lg font-semibold mb-2">{release.title}</h3>
+              <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">{release.title}</h3>
               <ul className="list-disc list-inside space-y-1">
                 {release.highlights.map((highlight, idx) => (
-                  <li key={idx} className="text-sm text-muted-foreground">{highlight}</li>
+                  <li key={idx} className="text-sm text-gray-700 dark:text-gray-300">{highlight}</li>
                 ))}
               </ul>
             </div>
