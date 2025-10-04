@@ -1133,6 +1133,20 @@ async def trigger_deploy_complete_alert(component: str, version: str = "latest")
 def check_debug_enabled():
     """Check if debug endpoints are enabled via environment variable"""
     return os.getenv("ENABLE_DEBUG", "false").lower() == "true"
+@app.get("/api/auth/whoami")
+async def auth_whoami(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Stable authentication check endpoint.
+    Returns current user info if authenticated, 401 if not.
+    Used by frontend for session validation.
+    """
+    return {
+        "user": user["username"],
+        "role": user["role"],
+        "authenticated": True
+    }
+
+
 
 @app.get("/api/debug/whoami")
 async def debug_whoami(request: Request):

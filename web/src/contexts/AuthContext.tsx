@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch(`${apiBase}/api/debug/whoami`, {
+      const response = await fetch(`${apiBase}/api/auth/whoami`, {
         credentials: 'include'
       })
       if (response.ok) {

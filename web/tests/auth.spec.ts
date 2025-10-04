@@ -14,7 +14,7 @@ test.describe('Authentication', () => {
       })
     })
     
-    await page.route('**/api/debug/whoami', async (route) => {
+    await page.route('**/api/auth/whoami', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -59,7 +59,7 @@ test.describe('Authentication', () => {
       })
     })
     
-    await page.route('**/api/debug/whoami', async (route) => {
+    await page.route('**/api/auth/whoami', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
