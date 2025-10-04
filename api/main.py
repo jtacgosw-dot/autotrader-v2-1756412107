@@ -83,13 +83,13 @@ logger.setLevel(logging.INFO)
 
 app = FastAPI(title="AutoTrader API", version="2.0.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://app.lunaraxolotl.com"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token"],
-)
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["https://app.lunaraxolotl.com"],
+#     allow_credentials=True,
+#     allow_methods=["GET", "POST", "OPTIONS"],
+#     allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token"],
+# )
 
 
 SESSION_TIMEOUT_MINUTES = 30
