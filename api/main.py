@@ -96,15 +96,24 @@ SESSION_TIMEOUT_MINUTES = 30
 COOKIE_MAX_AGE = SESSION_TIMEOUT_MINUTES * 60
 
 def discord_webhook_url():
-    """Load Discord webhook URL from AWS Secrets Manager"""
+    """Load Discord webhook URL from AWS Secrets Manager or environment variable"""
     try:
         client = boto3.client("secretsmanager", region_name="us-east-1")
         secret = client.get_secret_value(SecretId="autotrader/discord-webhook")["SecretString"]
         data = json.loads(secret)
-        return data.get("webhook_url")
+        webhook_url = data.get("webhook_url")
+        if webhook_url:
+            return webhook_url
     except Exception as e:
-        logger.error(f"Failed to load Discord webhook URL: {e}")
-        return None
+        logger.warning(f"Failed to load Discord webhook URL from Secrets Manager: {e}")
+    
+    webhook_url = os.getenv("DISCORD_WEBHOOK")
+    if webhook_url:
+        logger.info("Using Discord webhook URL from environment variable")
+        return webhook_url
+    
+    logger.error("Discord webhook URL not available from Secrets Manager or environment variable")
+    return None
 
 def load_credentials():
     logger.info("Loading credentials from AWS Secrets Manager")

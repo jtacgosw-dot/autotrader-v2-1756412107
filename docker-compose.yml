@@ -36,6 +36,7 @@ services:
       - ENABLE_DEBUG=false
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
       - ALERTS_ENABLED=true
       - ALERTS_MIN_SEVERITY=warn
       - ALERTS_DEBOUNCE_SEC=900
