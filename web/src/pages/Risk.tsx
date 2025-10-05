@@ -314,7 +314,7 @@ export function Risk() {
                 max="10"
                 value={riskSettings.dailyKillPct}
                 onChange={(e) => setRiskSettings(prev => ({ ...prev, dailyKillPct: parseFloat(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-xs text-muted-foreground mt-1">Current: {riskSettings.currentDrawdown?.toFixed(2) || '0.00'}%</p>
             </div>
@@ -330,7 +330,7 @@ export function Risk() {
                 max="100"
                 value={riskSettings.maxPosPct}
                 onChange={(e) => setRiskSettings(prev => ({ ...prev, maxPosPct: parseFloat(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -345,7 +345,7 @@ export function Risk() {
                 max="100"
                 value={riskSettings.maxSlippageBps}
                 onChange={(e) => setRiskSettings(prev => ({ ...prev, maxSlippageBps: parseInt(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>

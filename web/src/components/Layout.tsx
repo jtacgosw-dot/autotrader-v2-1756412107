@@ -72,7 +72,7 @@ export function Layout({ children }: LayoutProps) {
               </div>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <div className="hidden sm:block text-sm text-muted-foreground">Paper Trading Mode</div>
+              <div className="hidden lg:block text-sm text-muted-foreground">Paper Trading Mode</div>
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
               {user && (
                 <div className="flex items-center space-x-2 sm:space-x-3">
@@ -99,7 +99,6 @@ export function Layout({ children }: LayoutProps) {
                         </div>
                         <div className="border-t border-border pt-2 space-y-1">
                           <a href={`${import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'}/api/docs`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-500 hover:underline">API Documentation</a>
-                          <a href="https://github.com/jtacgosw-dot/autotrader-v2-1756412107" target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-500 hover:underline">GitHub Repository</a>
                         </div>
                       </div>
                     </div>
