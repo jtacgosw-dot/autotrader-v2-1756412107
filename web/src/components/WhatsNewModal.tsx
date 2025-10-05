@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
 import { Badge } from './ui/badge'
 import { Sparkles } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Release {
   version: string
@@ -18,8 +19,13 @@ interface ChangelogData {
 export function WhatsNewModal() {
   const [open, setOpen] = useState(false)
   const [changelog, setChangelog] = useState<ChangelogData | null>(null)
+  const { user, loading } = useAuth()
 
   useEffect(() => {
+    if (loading || !user) {
+      return
+    }
+
     fetch('/changelog.json')
       .then(res => res.json())
       .then((data: ChangelogData) => {
@@ -33,7 +39,7 @@ export function WhatsNewModal() {
         }
       })
       .catch(console.error)
-  }, [])
+  }, [user, loading])
 
   const handleClose = () => {
     if (changelog?.releases[0]) {
