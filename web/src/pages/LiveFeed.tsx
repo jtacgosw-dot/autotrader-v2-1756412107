@@ -18,7 +18,7 @@ interface TradeEvent {
 }
 
 interface HealthEvent {
-  discord_ok: boolean
+  discord_webhook_ok: boolean
   ssm_ok: boolean
   api_ok: boolean
   overall_status: string
@@ -236,8 +236,8 @@ export function LiveFeed() {
                   </div>
                   <div className="flex justify-between">
                     <span>Discord</span>
-                    <Badge variant={health.discord_ok ? "default" : "destructive"}>
-                      {health.discord_ok ? "OK" : "Error"}
+                    <Badge variant={health.discord_webhook_ok ? "default" : "destructive"}>
+                      {health.discord_webhook_ok ? "OK" : "Error"}
                     </Badge>
                   </div>
                   <div className="flex justify-between">
