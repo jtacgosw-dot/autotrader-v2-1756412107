@@ -205,8 +205,8 @@ export function LiveFeed() {
                       <span className="text-sm text-muted-foreground">{trade.venue}</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">${trade.notional.toFixed(2)}</div>
-                      <div className="text-sm text-muted-foreground">{trade.lat_ms}ms</div>
+                      <div className="font-semibold">${trade.notional?.toFixed(2) ?? 'N/A'}</div>
+                      <div className="text-sm text-muted-foreground">{trade.lat_ms ?? 0}ms</div>
                     </div>
                   </div>
                 ))}
