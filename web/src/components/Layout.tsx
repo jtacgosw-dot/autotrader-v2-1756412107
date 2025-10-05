@@ -72,8 +72,7 @@ export function Layout({ children }: LayoutProps) {
               </div>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
-              <div className="hidden lg:block text-sm text-muted-foreground">Paper Trading Mode</div>
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <div className="w-3 h-3 bg-green-500 rounded-full" title="Paper Trading Mode"></div>
               {user && (
                 <div className="flex items-center space-x-2 sm:space-x-3">
                   <div className="hidden sm:flex items-center space-x-2 text-sm">
