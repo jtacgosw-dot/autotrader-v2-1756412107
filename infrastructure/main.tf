@@ -309,8 +309,9 @@ resource "aws_budgets_budget" "autotrader" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  cost_filters = {
-    Tag = ["Stack:autotrader-v2"]
+  cost_filter {
+    name   = "TagKeyValue"
+    values = ["user:Stack$autotrader-v2"]
   }
 
   notification {

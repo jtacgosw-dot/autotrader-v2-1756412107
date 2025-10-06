@@ -1,6 +1,6 @@
 resource "aws_synthetics_canary" "web_hub" {
   name                 = "autotrader-web-hub"
-  artifact_s3_location = "s3://${aws_s3_bucket.web_bucket.id}/canary-artifacts/"
+  artifact_s3_location = "s3://autotrader-synthetics-artifacts/canary-artifacts/"
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "web-hub-canary.handler"
   zip_file             = "${path.module}/../scripts/synthetics/web-hub-canary.js"
