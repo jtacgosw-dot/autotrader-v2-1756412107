@@ -22,6 +22,7 @@ import uuid
 from contextvars import ContextVar
 import re
 from typing import AsyncGenerator
+import gzip
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from alerts.manager import AlertManager as NewAlertManager
@@ -77,6 +78,13 @@ HEALTH_CACHE_KEY = "autotrader:healthz"
 HEALTH_CACHE_TTL = 90
 TRADES_CHANNEL = "autotrader:trades"
 HEALTH_CHANNEL = "autotrader:health"
+AUDIT_BUCKET = os.getenv("AUDIT_BUCKET", "autotrader-audit-logs-v2")
+
+try:
+    s3_client = boto3.client('s3', region_name='us-east-1')
+except Exception as e:
+    logger.error(f"Failed to initialize S3 client: {e}")
+    s3_client = None
 
 json_handler = logging.StreamHandler()
 json_handler.setFormatter(RedactedJSONFormatter())
@@ -153,7 +161,40 @@ def load_credentials():
             "viewer": {"password": os.getenv("VIEWER_PASSWORD", "ViewerPass123!"), "role": "viewer"},
             "controller": {"password": os.getenv("CONTROLLER_PASSWORD", "ControllerPass456!"), "role": "controller"}
         }
-        return fallback_creds
+
+def upload_audit_log_to_s3(audit_log: dict) -> bool:
+    """Upload audit log to S3 with date partitioning"""
+    if not s3_client:
+        logger.warning("S3 client not initialized, skipping audit log upload")
+        return False
+    
+    try:
+        now = datetime.utcnow()
+        year = now.strftime("%Y")
+        month = now.strftime("%m")
+        day = now.strftime("%d")
+        timestamp = now.strftime("%Y%m%d_%H%M%S_%f")
+        
+        s3_key = f"year={year}/month={month}/day={day}/audit-{timestamp}.jsonl.gz"
+        
+        json_line = json.dumps(audit_log) + "\n"
+        compressed_data = gzip.compress(json_line.encode('utf-8'))
+        
+        s3_client.put_object(
+            Bucket=AUDIT_BUCKET,
+            Key=s3_key,
+            Body=compressed_data,
+            ContentType='application/x-jsonlines',
+            ContentEncoding='gzip',
+            ServerSideEncryption='AES256'
+        )
+        
+        logger.info(f"Audit log uploaded to s3://{AUDIT_BUCKET}/{s3_key}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to upload audit log to S3: {e}")
+        return False
 
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
@@ -868,8 +909,11 @@ async def pause_trading(user: dict = Depends(require_role("controller"))):
         "ts": datetime.utcnow().isoformat(),
         "action": "pause",
         "user": user["username"],
-        "details": "Trading paused via API"
+        "details": "Trading paused via API",
+        "request_id": request_id_var.get()
     }
+    
+    upload_audit_log_to_s3(audit_log)
     
     return {"status": "paused", "message": "Trading paused successfully"}
 
@@ -900,8 +944,11 @@ async def resume_trading(user=Depends(require_role("controller"))):
         "ts": datetime.utcnow().isoformat(),
         "action": "resume", 
         "user": user["username"],
-        "details": "Trading resumed via API"
+        "details": "Trading resumed via API",
+        "request_id": request_id_var.get()
     }
+    
+    upload_audit_log_to_s3(audit_log)
     
     return {"status": "running", "message": "Trading resumed successfully"}
 
@@ -915,8 +962,11 @@ async def update_risk_settings(settings: RiskSettings, user=Depends(require_role
         "ts": datetime.utcnow().isoformat(),
         "action": "risk_update",
         "user": user["username"], 
-        "details": f"Risk settings updated: kill={settings.daily_kill_pct}%, pos={settings.max_pos_pct}%, slippage={settings.max_slippage_bps}bps"
+        "details": f"Risk settings updated: kill={settings.daily_kill_pct}%, pos={settings.max_pos_pct}%, slippage={settings.max_slippage_bps}bps",
+        "request_id": request_id_var.get()
     }
+    
+    upload_audit_log_to_s3(audit_log)
     
     return {
         "message": "Risk settings updated",

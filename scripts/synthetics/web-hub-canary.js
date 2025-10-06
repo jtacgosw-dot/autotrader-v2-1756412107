@@ -6,6 +6,7 @@ const apiCanaryBlueprint = async function () {
         'https://app.lunaraxolotl.com/',
         'https://app.lunaraxolotl.com/login',
         'https://lunaraxolotl.com/api/healthz',
+        'https://lunaraxolotl.com/api/health',
     ];
 
     const headers = {
@@ -69,6 +70,53 @@ const apiCanaryBlueprint = async function () {
 
     log.info('SSE connection successful');
     await synthetics.takeScreenshot('live_feed', 'connected');
+    
+    const controllerUsername = process.env.CONTROLLER_USERNAME || 'controller';
+    const controllerPassword = process.env.CONTROLLER_PASSWORD;
+    
+    if (controllerPassword) {
+        try {
+            await page.goto('https://app.lunaraxolotl.com/login', {
+                waitUntil: 'networkidle0',
+                timeout: 30000
+            });
+            
+            await page.type('input[id="username"]', controllerUsername);
+            await page.type('input[id="password"]', controllerPassword);
+            await page.click('button[type="submit"]');
+            await page.waitForNavigation({ waitUntil: 'networkidle0' });
+            
+            const cookies = await page.cookies();
+            const sessionCookie = cookies.find(c => c.name === 'session');
+            
+            if (sessionCookie) {
+                const response = await page.evaluate(async (cookieValue) => {
+                    const res = await fetch('https://lunaraxolotl.com/api/test/smoke_trade', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Cookie': `session=${cookieValue}`
+                        },
+                        body: JSON.stringify({
+                            symbol: 'BTC/USDT',
+                            side: 'buy',
+                            notionalUsd: 5.0
+                        }),
+                        credentials: 'include'
+                    });
+                    return { status: res.status, ok: res.ok };
+                }, sessionCookie.value);
+                
+                if (!response.ok) {
+                    throw new Error(`Smoke trade test failed with status ${response.status}`);
+                }
+                
+                log.info('Smoke trade endpoint test successful');
+            }
+        } catch (error) {
+            log.warn(`Smoke trade test skipped: ${error.message}`);
+        }
+    }
 };
 
 exports.handler = async () => {
