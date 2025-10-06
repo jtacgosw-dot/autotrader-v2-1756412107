@@ -53,7 +53,7 @@ resource "aws_iam_role_policy" "canary_s3_policy" {
     Statement = [{
       Effect = "Allow"
       Action = ["s3:PutObject", "s3:GetObject"]
-      Resource = "${aws_s3_bucket.web_bucket.arn}/canary-artifacts/*"
+      Resource = "arn:aws:s3:::autotrader-synthetics-artifacts/canary-artifacts/*"
     }]
   })
 }

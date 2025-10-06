@@ -78,6 +78,7 @@ resource "aws_lb" "autotrader" {
   subnets           = data.aws_subnets.default.ids
 
   enable_deletion_protection = false
+  idle_timeout              = 120
 
   tags = {
     Stack = "autotrader-v2"
@@ -331,4 +332,215 @@ output "cloudfront_domain_name" {
 
 output "s3_bucket_name" {
   value = aws_s3_bucket.web_hub.bucket
+}
+
+resource "aws_s3_bucket" "cloudtrail" {
+  bucket = "autotrader-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_public_access_block" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_policy" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AWSCloudTrailAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.cloudtrail.arn
+      },
+      {
+        Sid    = "AWSCloudTrailWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.cloudtrail.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_cloudtrail" "autotrader" {
+  name                          = "autotrader-trail"
+  s3_bucket_name                = aws_s3_bucket.cloudtrail.id
+  include_global_service_events = true
+  is_multi_region_trail         = true
+  enable_logging                = true
+
+  event_selector {
+    read_write_type           = "All"
+    include_management_events = true
+  }
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}
+
+resource "aws_guardduty_detector" "autotrader" {
+  enable = true
+
+  finding_publishing_frequency = "FIFTEEN_MINUTES"
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "guardduty_findings" {
+  name        = "autotrader-guardduty-findings"
+  description = "Capture GuardDuty findings"
+
+  event_pattern = jsonencode({
+    source      = ["aws.guardduty"]
+    detail-type = ["GuardDuty Finding"]
+    detail = {
+      severity = [7, 8, 9]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "guardduty_to_sns" {
+  rule      = aws_cloudwatch_event_rule.guardduty_findings.name
+  target_id = "SendToSNS"
+  arn       = aws_sns_topic.alerts.arn
+}
+
+resource "aws_sns_topic_policy" "guardduty" {
+  arn = aws_sns_topic.alerts.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.alerts.arn
+      }
+    ]
+  })
+}
+
+resource "aws_sns_topic" "alerts" {
+  name = "autotrader-alerts"
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}
+
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+}
+
+resource "aws_launch_template" "autotrader" {
+  name_prefix   = "autotrader-"
+  image_id      = data.aws_ami.ubuntu.id
+  instance_type = "t3.medium"
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.autotrader_ec2.name
+  }
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.ec2.id]
+  }
+
+  user_data = base64encode(<<-EOF
+    #!/bin/bash
+    cd /opt/autotrader || exit 1
+    docker-compose up -d
+  EOF
+  )
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name  = "autotrader-asg-instance"
+      Stack = "autotrader-v2"
+      Env   = "prod"
+    }
+  }
+}
+
+resource "aws_autoscaling_group" "autotrader" {
+  name                = "autotrader-asg"
+  vpc_zone_identifier = data.aws_subnets.default.ids
+  target_group_arns   = [aws_lb_target_group.autotrader.arn]
+  health_check_type   = "ELB"
+  health_check_grace_period = 300
+
+  min_size         = 1
+  max_size         = 2
+  desired_capacity = 1
+
+  launch_template {
+    id      = aws_launch_template.autotrader.id
+    version = "$Latest"
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "autotrader-asg-instance"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Stack"
+    value               = "autotrader-v2"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_autoscaling_policy" "target_tracking" {
+  name                   = "autotrader-cpu-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.autotrader.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 70.0
+  }
 }

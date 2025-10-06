@@ -1,0 +1,8 @@
+{
+  "service": "autotrader-web",
+  "version": "2.0.0",
+  "build_sha": "REPLACED_BY_CI",
+  "build_time": "REPLACED_BY_CI",
+  "api_base": "https://lunaraxolotl.com",
+  "environment": "prod"
+}

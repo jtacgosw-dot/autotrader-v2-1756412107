@@ -446,6 +446,79 @@ class AlertManager:
         except Exception as e:
             logger.error(f"Error adding to aggregation: {e}")
     
+    async def send_daily_digest(self):
+        """Send daily digest at 09:05 UTC with stats"""
+        if not self.enable or not self.webhook_url:
+            return False
+        
+        try:
+            open_incidents = await self.get_open_incidents()
+            
+            severity_counts = {"INFO": 0, "WARN": 0, "CRITICAL": 0}
+            top_offenders = []
+            
+            for incident in open_incidents:
+                severity = incident.get("severity", "INFO")
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+                
+                if incident.get("count", 1) > 5:
+                    top_offenders.append({
+                        "key": incident.get("key"),
+                        "count": incident.get("count"),
+                        "severity": severity
+                    })
+            
+            top_offenders.sort(key=lambda x: x["count"], reverse=True)
+            
+            redis_info = self.redis.info()
+            
+            embed = {
+                "title": "📊 Daily System Digest",
+                "color": 0x3498db,
+                "fields": [
+                    {
+                        "name": "Open Incidents",
+                        "value": f"Total: {len(open_incidents)}\n"
+                                 f"🔴 Critical: {severity_counts['CRITICAL']}\n"
+                                 f"🟡 Warning: {severity_counts['WARN']}\n"
+                                 f"⚪ Info: {severity_counts['INFO']}",
+                        "inline": True
+                    },
+                    {
+                        "name": "Top Offenders (Last 24h)",
+                        "value": "\n".join([
+                            f"{i+1}. {o['key']}: {o['count']} events ({o['severity']})"
+                            for i, o in enumerate(top_offenders[:5])
+                        ]) if top_offenders else "None",
+                        "inline": True
+                    },
+                    {
+                        "name": "System Health",
+                        "value": f"Redis Keys: {redis_info.get('db0', {}).get('keys', 0)}\n"
+                                 f"Redis Memory: {redis_info.get('used_memory_human', 'N/A')}\n"
+                                 f"Uptime: {redis_info.get('uptime_in_days', 0)} days",
+                        "inline": False
+                    }
+                ],
+                "footer": {
+                    "text": f"AutoTrader {self.env} | Generated at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+                },
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            async with self.rate_limiter:
+                message_id = await self._post_to_discord(embed)
+            
+            if message_id:
+                logger.info("Daily digest sent successfully")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error sending daily digest: {e}", exc_info=True)
+            return False
+
     async def send_heartbeat(self) -> bool:
         """Send heartbeat if alerts were sent in last 24h"""
         try:

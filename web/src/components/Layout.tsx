@@ -13,6 +13,7 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const { user, logout } = useAuth()
   const [maintenanceMode, setMaintenanceMode] = useState(false)
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null)
   const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
   
   useKeyboardShortcuts()
@@ -22,6 +23,19 @@ export function Layout({ children }: LayoutProps) {
       .then(res => res.json())
       .then(data => setMaintenanceMode(data.maintenance_mode))
       .catch(() => {})
+    
+    const checkHealth = async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/health`, { credentials: 'include' })
+        setApiHealthy(res.ok)
+      } catch {
+        setApiHealthy(false)
+      }
+    }
+    
+    checkHealth()
+    const interval = setInterval(checkHealth, 30000)
+    return () => clearInterval(interval)
   }, [apiBase])
 
   const navigation = [
@@ -72,6 +86,10 @@ export function Layout({ children }: LayoutProps) {
               </div>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
+              <div 
+                className={`w-3 h-3 rounded-full ${apiHealthy === true ? 'bg-green-500 animate-pulse' : apiHealthy === false ? 'bg-red-500' : 'bg-gray-400'}`}
+                title={apiHealthy === true ? 'API Online' : apiHealthy === false ? 'API Offline' : 'Checking...'}
+              />
               <div className="w-3 h-3 bg-green-500 rounded-full" title="Paper Trading Mode"></div>
               {user && (
                 <div className="flex items-center space-x-2 sm:space-x-3">
@@ -115,6 +133,9 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </nav>
+      <div className="bg-green-600 text-white text-center py-2 text-sm font-semibold">
+        📄 PAPER TRADING MODE - Not using real funds
+      </div>
       {import.meta.env.VITE_ENV === 'prod' && (
         <div className="bg-blue-600 text-white text-center py-1 text-sm">
           🔵 Production Environment
@@ -130,14 +151,23 @@ export function Layout({ children }: LayoutProps) {
       </main>
       <footer className="border-t border-border mt-12 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center text-sm text-muted-foreground">
-            <div>
-              AutoTrader v2 | Build: {import.meta.env.VITE_BUILD_SHA?.substring(0, 7) || 'dev'} | 
-              {' '}{import.meta.env.VITE_BUILD_TIME || 'local'}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 text-sm text-muted-foreground">
+            <div className="flex flex-col space-y-1">
+              <div>
+                AutoTrader v2 | Build: {import.meta.env.VITE_BUILD_SHA?.substring(0, 7) || 'dev'} | 
+                {' '}{import.meta.env.VITE_BUILD_TIME || 'local'}
+              </div>
+              <div>
+                API: {import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'} | 
+                Env: {import.meta.env.VITE_ENV || 'dev'}
+              </div>
             </div>
-            <div>
-              API: {import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'} | 
-              Env: {import.meta.env.VITE_ENV || 'dev'}
+            <div className="flex flex-wrap gap-4">
+              <a href="https://docs.google.com/document/d/1_RUNBOOK_PLACEHOLDER/edit" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
+                📖 Runbook
+              </a>
+              <a href="/terms" className="hover:text-foreground">Terms of Service</a>
+              <a href="/disclaimer" className="hover:text-foreground">Disclaimer</a>
             </div>
           </div>
         </div>

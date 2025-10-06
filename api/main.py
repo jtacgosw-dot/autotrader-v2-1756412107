@@ -1142,6 +1142,48 @@ async def trigger_deploy_complete_alert(component: str, version: str = "latest")
 def check_debug_enabled():
     """Check if debug endpoints are enabled via environment variable"""
     return os.getenv("ENABLE_DEBUG", "false").lower() == "true"
+@app.get("/api/version")
+async def get_version():
+    """Get API version and build information"""
+    return {
+        "service": "autotrader-api",
+        "version": os.getenv("API_VERSION", "2.0.0"),
+        "build_sha": os.getenv("GIT_SHA", "unknown"),
+        "build_time": os.getenv("BUILD_TIME", "unknown"),
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.patch}",
+        "environment": os.getenv("TRADING_MODE", "paper")
+    }
+
+@app.post("/api/alerts/mute")
+async def mute_alerts(
+    request: dict,
+    user: dict = Depends(require_role("controller"))
+):
+    """Mute alerts for a specified duration"""
+    severity = request.get("severity", "WARN")
+    duration_minutes = request.get("duration_minutes", 30)
+    
+    if alert_manager:
+        success = await alert_manager.mute(severity, duration_minutes)
+        return {"success": success, "message": f"Alerts muted for {duration_minutes} minutes"}
+    
+    return {"success": False, "message": "AlertManager not available"}
+
+@app.post("/api/alerts/unmute")
+async def unmute_alerts(
+    request: dict,
+    user: dict = Depends(require_role("controller"))
+):
+    """Unmute alerts"""
+    severity = request.get("severity", "WARN")
+    
+    if alert_manager:
+        success = await alert_manager.unmute(severity)
+        return {"success": success, "message": "Alerts unmuted"}
+    
+    return {"success": False, "message": "AlertManager not available"}
+
+
 @app.get("/api/auth/whoami")
 async def auth_whoami(request: Request, user: dict = Depends(get_current_user)):
     """
@@ -1220,6 +1262,43 @@ async def startup_event():
     
     refresh_health_probes()
     logger.info("Initial health probe completed")
+    
+    if alert_manager:
+        asyncio.create_task(heartbeat_task_async())
+        asyncio.create_task(daily_digest_task_async())
+        logger.info("AlertManager heartbeat and daily digest tasks scheduled")
+
+async def heartbeat_task_async():
+    """Send heartbeat every 30 minutes if there were recent alerts"""
+    while True:
+        try:
+            await asyncio.sleep(1800)
+            if alert_manager:
+                await alert_manager.send_heartbeat()
+        except Exception as e:
+            logger.error(f"Error in heartbeat task: {e}")
+            await asyncio.sleep(300)
+
+async def daily_digest_task_async():
+    """Send daily digest at 09:05 UTC"""
+    while True:
+        try:
+            now = datetime.utcnow()
+            next_run = now.replace(hour=9, minute=5, second=0, microsecond=0)
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            
+            wait_seconds = (next_run - now).total_seconds()
+            logger.info(f"Daily digest scheduled for {next_run} UTC ({wait_seconds}s from now)")
+            
+            await asyncio.sleep(wait_seconds)
+            
+            if alert_manager:
+                await alert_manager.send_daily_digest()
+                
+        except Exception as e:
+            logger.error(f"Error in daily digest task: {e}")
+            await asyncio.sleep(3600)
 
 class SmokeTradeRequest(BaseModel):
     symbol: str

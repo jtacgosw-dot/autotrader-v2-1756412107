@@ -196,6 +196,40 @@ export function Risk() {
     setIsUpdating(false)
   }
 
+  const handleSilenceAlerts = async (minutes: number) => {
+    try {
+      const response = await fetch(`${apiBase}/api/alerts/mute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ severity: 'WARN', duration_minutes: minutes })
+      })
+      
+      if (response.ok) {
+        alert(`Alerts silenced for ${minutes} minutes`)
+      }
+    } catch (error) {
+      console.error('Failed to silence alerts:', error)
+    }
+  }
+
+  const handleUnsilenceAlerts = async () => {
+    try {
+      const response = await fetch(`${apiBase}/api/alerts/unmute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ severity: 'WARN' })
+      })
+      
+      if (response.ok) {
+        alert('Alerts unmuted')
+      }
+    } catch (error) {
+      console.error('Failed to unmute alerts:', error)
+    }
+  }
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
@@ -378,6 +412,45 @@ export function Risk() {
               >
                 {maintenanceMode ? 'Disable Maintenance' : 'Enable Maintenance'}
               </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Shield className="w-5 h-5 mr-2" />
+            Alert Controls
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Silence Alerts</label>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => handleSilenceAlerts(30)}
+                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-md transition-colors"
+                >
+                  Silence 30 min
+                </button>
+                <button
+                  onClick={() => handleSilenceAlerts(60)}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md transition-colors"
+                >
+                  Silence 1 hour
+                </button>
+                <button
+                  onClick={() => handleUnsilenceAlerts()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                >
+                  Unmute
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Silences INFO and WARN alerts. CRITICAL alerts still post.
+              </p>
             </div>
           </div>
         </CardContent>
