@@ -1150,7 +1150,7 @@ async def get_version():
         "version": os.getenv("API_VERSION", "2.0.0"),
         "build_sha": os.getenv("GIT_SHA", "unknown"),
         "build_time": os.getenv("BUILD_TIME", "unknown"),
-        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.patch}",
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "environment": os.getenv("TRADING_MODE", "paper")
     }
 
