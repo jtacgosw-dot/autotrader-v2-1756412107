@@ -18,6 +18,8 @@ import csv
 import threading
 import time
 import redis
+import uuid
+from contextvars import ContextVar
 import re
 from typing import AsyncGenerator
 
@@ -83,14 +85,24 @@ logger.setLevel(logging.INFO)
 
 app = FastAPI(title="AutoTrader API", version="2.0.0")
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["https://app.lunaraxolotl.com"],
-#     allow_credentials=True,
-#     allow_methods=["GET", "POST", "OPTIONS"],
-#     allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://app.lunaraxolotl.com"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
+    allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token", "X-Request-ID"],
+    expose_headers=["Set-Cookie", "X-Request-ID"],
+)
 
+request_id_var: ContextVar[str] = ContextVar('request_id', default='')
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request_id_var.set(request_id)
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 SESSION_TIMEOUT_MINUTES = 30
 COOKIE_MAX_AGE = SESSION_TIMEOUT_MINUTES * 60
@@ -1153,6 +1165,40 @@ async def get_version():
         "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "environment": os.getenv("TRADING_MODE", "paper")
     }
+
+@app.get("/api/system/health")
+async def system_health():
+    """Get detailed system health including SSE and Discord status"""
+    import aiohttp
+    
+    health = {
+        "api": "ok",
+        "redis": "unknown",
+        "discord": "unknown",
+        "sse_connections": 0
+    }
+    
+    try:
+        if alert_manager and hasattr(alert_manager, 'redis') and alert_manager.redis:
+            alert_manager.redis.ping()
+            health["redis"] = "ok"
+    except Exception as e:
+        health["redis"] = "error"
+        logger.error(f"Redis health check failed: {e}")
+    
+    try:
+        webhook_url = os.getenv("DISCORD_WEBHOOK")
+        if webhook_url:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(webhook_url, timeout=aiohttp.ClientTimeout(total=2)) as resp:
+                    health["discord"] = "ok" if resp.status < 500 else "degraded"
+        else:
+            health["discord"] = "not_configured"
+    except Exception as e:
+        health["discord"] = "error"
+        logger.error(f"Discord health check failed: {e}")
+    
+    return health
 
 @app.post("/api/alerts/mute")
 async def mute_alerts(

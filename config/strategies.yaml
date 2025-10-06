@@ -1,0 +1,33 @@
+sleeves:
+  swing:
+    enabled: false
+    symbols:
+      - BTC/USDT
+      - ETH/USDT
+    tf_fast: 15m
+    tf_slow: 1h
+    sma_fast: 20
+    sma_slow: 60
+    rsi_min: 50
+    rsi_max: 70
+    atr_stop: 1.0
+    atr_trail: 2.0
+    vol_ma_len: 20
+    risk_per_trade_bps: 25
+    pos_cap_pct: 1.0
+    min_hold_minutes: 30
+    reentry_cooldown_minutes: 60
+  
+  event:
+    enabled: false
+    symbols:
+      - BTC/USDT
+      - ETH/USDT
+    tf: 5m
+    donchian_len: 20
+    atr_mult: 1.3
+    vol_mult: 1.2
+    atr_trail: 1.5
+    risk_per_trade_bps: 25
+    pos_cap_pct: 1.0
+    reentry_bars: 10

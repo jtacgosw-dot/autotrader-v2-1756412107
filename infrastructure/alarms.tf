@@ -165,3 +165,65 @@ resource "aws_cloudwatch_metric_alarm" "budget_breach" {
     Env   = "prod"
   }
 }
+
+resource "aws_cloudwatch_log_metric_filter" "sse_disconnects" {
+  name           = "autotrader-sse-disconnects"
+  log_group_name = aws_cloudwatch_log_group.api.name
+  pattern        = "[time, level, msg=\"*SSE client disconnected*\"]"
+
+  metric_transformation {
+    name      = "SSEDisconnectCount"
+    namespace = "AutoTrader"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "sse_disconnect_rate" {
+  alarm_name          = "autotrader-sse-disconnect-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "SSEDisconnectCount"
+  namespace           = "AutoTrader"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "10"
+  alarm_description   = "Alert when SSE disconnect rate exceeds 10 in 5 min"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "discord_failures" {
+  name           = "autotrader-discord-failures"
+  log_group_name = aws_cloudwatch_log_group.api.name
+  pattern        = "[time, level=ERROR*, msg=\"*Discord*failed*\"]"
+
+  metric_transformation {
+    name      = "DiscordFailureCount"
+    namespace = "AutoTrader"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "discord_failure_rate" {
+  alarm_name          = "autotrader-discord-failure-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "DiscordFailureCount"
+  namespace           = "AutoTrader"
+  period              = "600"
+  statistic           = "Sum"
+  threshold           = "3"
+  alarm_description   = "Alert when Discord delivery failures exceed 3 in 10 min"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}

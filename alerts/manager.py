@@ -88,7 +88,8 @@ class AlertManager:
         cooldown: Optional[int] = None,
         group: str = "ops",
         tags: Optional[Dict[str, str]] = None,
-        links: Optional[Dict[str, str]] = None
+        links: Optional[Dict[str, str]] = None,
+        **kwargs
     ) -> bool:
         """
         Send an alert with full incident lifecycle management.
@@ -138,11 +139,11 @@ class AlertManager:
                     return False
                 
                 return await self._update_incident(
-                    incident, type, severity, key, title, body, tags, links, redis_keys, cooldown
+                    incident, type, severity, key, title, body, tags, links, redis_keys, cooldown, **kwargs
                 )
             else:
                 return await self._open_incident(
-                    type, severity, key, title, body, tags, links, redis_keys, dedupe_ttl, cooldown
+                    type, severity, key, title, body, tags, links, redis_keys, dedupe_ttl, cooldown, **kwargs
                 )
                 
         except Exception as e:
@@ -151,11 +152,11 @@ class AlertManager:
     
     async def _open_incident(
         self, type: str, severity: str, key: str, title: str, body: str,
-        tags: Dict, links: Dict, redis_keys: Dict, dedupe_ttl: int, cooldown: int
+        tags: Dict, links: Dict, redis_keys: Dict, dedupe_ttl: int, cooldown: int, **kwargs
     ) -> bool:
         """Open a new incident"""
         try:
-            embed = self._build_embed(severity, title, body, tags, links, count=1, is_open=True)
+            embed = self._build_embed(severity, title, body, tags, links, count=1, is_open=True, request_id=kwargs.get('request_id'))
             
             async with self.rate_limiter:
                 message_id = await self._post_to_discord(embed)
@@ -188,7 +189,7 @@ class AlertManager:
     
     async def _update_incident(
         self, incident: Dict, type: str, severity: str, key: str, title: str,
-        body: str, tags: Dict, links: Dict, redis_keys: Dict, cooldown: int
+        body: str, tags: Dict, links: Dict, redis_keys: Dict, cooldown: int, **kwargs
     ) -> bool:
         """Update an existing incident"""
         try:
@@ -200,7 +201,8 @@ class AlertManager:
                 severity, title, body, tags, links,
                 count=incident["count"],
                 opened_at=incident.get("opened_at"),
-                is_open=True
+                is_open=True,
+                request_id=kwargs.get('request_id')
             )
             
             message_id = incident.get("discord_message_id")
@@ -270,7 +272,7 @@ class AlertManager:
     def _build_embed(
         self, severity: str, title: str, body: str, tags: Dict,
         links: Dict, count: int = 1, opened_at: Optional[str] = None,
-        is_open: bool = True
+        is_open: bool = True, request_id: Optional[str] = None
     ) -> Dict:
         """Build Discord embed"""
         emoji = self._severity_emoji(severity)
@@ -316,6 +318,8 @@ class AlertManager:
             footer_text += f" • seen {count} times"
         if opened_at:
             footer_text += f" • last at {datetime.utcnow().strftime('%H:%M:%S')}Z"
+        if request_id:
+            footer_text += f" • req: {request_id[:8]}"
         
         embed["footer"] = {"text": footer_text}
         

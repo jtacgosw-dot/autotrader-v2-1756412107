@@ -335,6 +335,75 @@ output "s3_bucket_name" {
   value = aws_s3_bucket.web_hub.bucket
 }
 
+resource "aws_wafv2_web_acl" "alb" {
+  name  = "autotrader-alb-waf"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AWSManagedRulesCommonRuleSetMetric"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "RateLimitRule"
+    priority = 2
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "RateLimitRule"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "autotrader-alb-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = {
+    Stack = "autotrader-v2"
+    Env   = "prod"
+  }
+}
+
+resource "aws_wafv2_web_acl_association" "alb" {
+  resource_arn = aws_lb.autotrader.arn
+  web_acl_arn  = aws_wafv2_web_acl.alb.arn
+}
+
 resource "aws_s3_bucket" "cloudtrail" {
   bucket = "autotrader-cloudtrail-logs-${data.aws_caller_identity.current.account_id}"
 
@@ -403,6 +472,52 @@ resource "aws_cloudtrail" "autotrader" {
   tags = {
     Stack = "autotrader-v2"
     Env   = "prod"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+
+  rule {
+    id     = "cloudtrail-lifecycle"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 365
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "audit_logs" {
+  bucket = "autotrader-audit-logs-v2"
+
+  rule {
+    id     = "audit-lifecycle"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+
+    expiration {
+      days = 365
+    }
   }
 }
 

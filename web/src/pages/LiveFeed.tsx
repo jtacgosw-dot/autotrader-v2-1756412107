@@ -28,6 +28,7 @@ interface HealthEvent {
 export function LiveFeed() {
   const [trades, setTrades] = useState<TradeEvent[]>([])
   const [health, setHealth] = useState<HealthEvent | null>(null)
+  const [systemHealth, setSystemHealth] = useState<any>(null)
   const [connected, setConnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [reconnectCountdown, setReconnectCountdown] = useState(0)
@@ -134,6 +135,20 @@ export function LiveFeed() {
     connectSSE()
     connectHealthSSE()
 
+    const checkSystemHealth = async () => {
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+      try {
+        const res = await fetch(`${apiBase}/api/system/health`, { credentials: 'include' })
+        const data = await res.json()
+        setSystemHealth(data)
+      } catch (error) {
+        console.error('Failed to fetch system health:', error)
+      }
+    }
+    
+    checkSystemHealth()
+    const healthInterval = setInterval(checkSystemHealth, 30000)
+
     const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
     fetch(`${apiBase}/api/trades?limit=50`, { credentials: 'include' })
       .then(res => res.json())
@@ -142,6 +157,7 @@ export function LiveFeed() {
 
     return () => {
       if (reconnectTimer) clearInterval(reconnectTimer)
+      if (healthInterval) clearInterval(healthInterval)
       tradesEventSource.current?.close()
       healthEventSource.current?.close()
     }
@@ -226,28 +242,44 @@ export function LiveFeed() {
               <CardTitle>System Health</CardTitle>
             </CardHeader>
             <CardContent>
-              {health && (
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>API</span>
-                    <Badge variant={health.api_ok ? "default" : "destructive"}>
-                      {health.api_ok ? "OK" : "Error"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Discord</span>
-                    <Badge variant={health.discord_webhook_ok ? "default" : "destructive"}>
-                      {health.discord_webhook_ok ? "OK" : "Error"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>SSM</span>
-                    <Badge variant={health.ssm_ok ? "default" : "destructive"}>
-                      {health.ssm_ok ? "OK" : "Error"}
-                    </Badge>
-                  </div>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>API</span>
+                  <Badge variant={systemHealth?.api === 'ok' ? "default" : "destructive"}>
+                    {systemHealth?.api === 'ok' ? 'OK' : 'ERROR'}
+                  </Badge>
                 </div>
-              )}
+                <div className="flex justify-between">
+                  <span>Redis</span>
+                  <Badge variant={systemHealth?.redis === 'ok' ? "default" : systemHealth?.redis === 'unknown' ? 'secondary' : "destructive"}>
+                    {systemHealth?.redis?.toUpperCase() || 'UNKNOWN'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Discord</span>
+                  <Badge variant={
+                    systemHealth?.discord === 'ok' ? "default" : 
+                    systemHealth?.discord === 'degraded' || systemHealth?.discord === 'not_configured' ? 'secondary' : 
+                    "destructive"
+                  }>
+                    {systemHealth?.discord === 'not_configured' ? 'NOT CONFIGURED' : systemHealth?.discord?.toUpperCase() || 'UNKNOWN'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>SSE Connections</span>
+                  <span className="text-sm">{systemHealth?.sse_connections || 0}</span>
+                </div>
+                {health && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>SSM</span>
+                      <Badge variant={health.ssm_ok ? "default" : "destructive"}>
+                        {health.ssm_ok ? "OK" : "Error"}
+                      </Badge>
+                    </div>
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>

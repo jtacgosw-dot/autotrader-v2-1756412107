@@ -3,7 +3,7 @@ resource "aws_synthetics_canary" "web_hub" {
   artifact_s3_location = "s3://autotrader-synthetics-artifacts/canary-artifacts/"
   execution_role_arn   = aws_iam_role.canary_role.arn
   handler              = "web-hub-canary.handler"
-  zip_file             = "${path.module}/../scripts/synthetics/web-hub-canary.js"
+  zip_file             = "${path.module}/../scripts/synthetics/web-hub-canary.zip"
   runtime_version      = "syn-nodejs-puppeteer-6.2"
 
   schedule {

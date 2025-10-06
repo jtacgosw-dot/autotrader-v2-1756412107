@@ -1,0 +1,128 @@
+{
+  "dashboard": {
+    "title": "AutoTrader Trading Sleeves",
+    "tags": ["autotrader", "trading", "sleeves"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Daily PnL by Sleeve",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sleeve_daily_pnl{job=\"api\"}",
+            "legendFormat": "{{sleeve}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "currencyUSD", "label": "PnL"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Open Positions by Sleeve",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sleeve_open_positions{job=\"api\",sleeve=\"swing\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "title": "Swing Open Positions"
+      },
+      {
+        "id": 3,
+        "title": "Event Open Positions",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 8, "y": 8},
+        "targets": [
+          {
+            "expr": "sleeve_open_positions{job=\"api\",sleeve=\"event\"}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Total Open Positions",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 16, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(sleeve_open_positions{job=\"api\"})",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 5,
+        "title": "Trade Count by Sleeve (24h)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+        "targets": [
+          {
+            "expr": "increase(sleeve_trades_total{job=\"api\"}[24h])",
+            "legendFormat": "{{sleeve}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Trades"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Stop-Out Count by Sleeve (24h)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+        "targets": [
+          {
+            "expr": "increase(sleeve_stopouts_total{job=\"api\"}[24h])",
+            "legendFormat": "{{sleeve}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Stop-Outs"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Sleeve Disable Events",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "sleeve_disabled{job=\"api\"}",
+            "refId": "A",
+            "format": "table"
+          }
+        ]
+      }
+    ]
+  }
+}
