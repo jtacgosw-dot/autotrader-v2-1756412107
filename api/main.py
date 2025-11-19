@@ -97,9 +97,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://app.lunaraxolotl.com"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
-    allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token", "X-Request-ID"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["Authorization", "Content-Type", "Cookie", "X-CSRF-Token", "X-Request-ID", "X-Requested-With", "Baggage", "Sentry-Trace"],
     expose_headers=["Set-Cookie", "X-Request-ID"],
+    max_age=86400,
 )
 
 request_id_var: ContextVar[str] = ContextVar('request_id', default='')
