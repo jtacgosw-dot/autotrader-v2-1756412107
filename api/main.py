@@ -1413,6 +1413,10 @@ async def startup_event():
     health_thread.start()
     logger.info(f"Background health monitoring thread started: {health_thread.name}")
     
+    price_thread = threading.Thread(target=fetch_live_prices, daemon=True, name="PriceFetchThread")
+    price_thread.start()
+    logger.info(f"Live price fetching thread started: {price_thread.name}")
+    
     refresh_health_probes()
     logger.info("Initial health probe completed")
     
