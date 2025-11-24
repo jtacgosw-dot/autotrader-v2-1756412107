@@ -4,13 +4,13 @@ builder = "NIXPACKS"
 [build.nixpacksPlan]
 providers = ["python"]
 
-[[build.nixpacksPlan.phases.setup]]
+[build.nixpacksPlan.phases.setup]
 nixPkgs = ["python313"]
 
-[[build.nixpacksPlan.phases.install]]
+[build.nixpacksPlan.phases.install]
 cmds = ["pip install -r api/requirements.txt"]
 
-[[build.nixpacksPlan.phases.build]]
+[build.nixpacksPlan.phases.build]
 cmds = []
 
 [deploy]
