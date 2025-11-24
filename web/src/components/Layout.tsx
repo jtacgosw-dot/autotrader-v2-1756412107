@@ -14,7 +14,7 @@ export function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth()
   const [maintenanceMode, setMaintenanceMode] = useState(false)
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null)
-  const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+  const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
   
   useKeyboardShortcuts()
 
@@ -115,7 +115,7 @@ export function Layout({ children }: LayoutProps) {
                           <div><kbd className="px-1 py-0.5 bg-muted rounded">g</kbd> + <kbd className="px-1 py-0.5 bg-muted rounded">l</kbd> → Live</div>
                         </div>
                         <div className="border-t border-border pt-2 space-y-1">
-                          <a href={`${import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'}/api/docs`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-500 hover:underline">API Documentation</a>
+                          <a href={`${import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'}/api/docs`} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-500 hover:underline">API Documentation</a>
                         </div>
                       </div>
                     </div>
@@ -158,7 +158,7 @@ export function Layout({ children }: LayoutProps) {
                 {' '}{import.meta.env.VITE_BUILD_TIME || 'local'}
               </div>
               <div>
-                API: {import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'} | 
+                API: {import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'} | 
                 Env: {import.meta.env.VITE_ENV || 'dev'}
               </div>
             </div>

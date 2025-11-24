@@ -40,7 +40,7 @@ export function Overview() {
 
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null)
 
-  const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+  const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -213,7 +213,7 @@ export function Overview() {
                 View Grafana Dashboard
               </button>
               <button 
-                onClick={() => window.open(`${import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'}/api/healthz`, '_blank')}
+                onClick={() => window.open(`${import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'}/api/healthz`, '_blank')}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
               >
                 Check API Health

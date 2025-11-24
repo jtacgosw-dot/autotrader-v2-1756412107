@@ -44,7 +44,7 @@ export function LiveFeed() {
     let reconnectTimer: NodeJS.Timeout | null = null
 
     const connectSSE = () => {
-      const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
       
       tradesEventSource.current = new EventSource(`${apiBase}/api/stream/trades`, {
         withCredentials: true
@@ -86,7 +86,7 @@ export function LiveFeed() {
           setTimeout(() => {
             if (reconnectTimer) clearInterval(reconnectTimer)
             if (lastTradeTimestamp) {
-              const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+              const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
               fetch(`${apiBase}/api/trades?since=${lastTradeTimestamp}&limit=50`, { credentials: 'include' })
                 .then(res => res.json())
                 .then(data => {
@@ -105,7 +105,7 @@ export function LiveFeed() {
     }
 
     const connectHealthSSE = () => {
-      const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
       
       healthEventSource.current = new EventSource(`${apiBase}/api/stream/health`, {
         withCredentials: true
@@ -136,7 +136,7 @@ export function LiveFeed() {
     connectHealthSSE()
 
     const checkSystemHealth = async () => {
-      const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
       try {
         const res = await fetch(`${apiBase}/api/system/health`, { credentials: 'include' })
         const data = await res.json()
@@ -149,7 +149,7 @@ export function LiveFeed() {
     checkSystemHealth()
     const healthInterval = setInterval(checkSystemHealth, 30000)
 
-    const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+    const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
     fetch(`${apiBase}/api/trades?limit=50`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => setTrades(data.trades || []))

@@ -44,7 +44,7 @@ export function Venues() {
     }
   ])
 
-  const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+  const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
 
   useEffect(() => {
     const fetchVenues = async () => {

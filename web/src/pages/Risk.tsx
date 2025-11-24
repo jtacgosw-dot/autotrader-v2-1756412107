@@ -37,7 +37,7 @@ export function Risk() {
   ])
 
   const [isUpdating, setIsUpdating] = useState(false)
-  const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+  const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
 
   useEffect(() => {
     const fetchRiskData = async () => {

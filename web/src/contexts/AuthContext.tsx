@@ -17,7 +17,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const apiBase = import.meta.env.VITE_API_BASE || 'https://lunaraxolotl.com'
+  const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
 
   useEffect(() => {
     checkAuth()
