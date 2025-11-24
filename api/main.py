@@ -162,6 +162,7 @@ def load_credentials():
             "viewer": {"password": os.getenv("VIEWER_PASSWORD", "ViewerPass123!"), "role": "viewer"},
             "controller": {"password": os.getenv("CONTROLLER_PASSWORD", "ControllerPass456!"), "role": "controller"}
         }
+        return fallback_creds
 
 def upload_audit_log_to_s3(audit_log: dict) -> bool:
     """Upload audit log to S3 with date partitioning"""
