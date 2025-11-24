@@ -68,6 +68,7 @@ logger = logging.getLogger(__name__)
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=int(os.getenv("REDIS_PORT", "6379")),
+    password=os.getenv("REDIS_PASSWORD"),
     decode_responses=True,
     socket_connect_timeout=5,
     socket_timeout=5,
@@ -201,6 +202,7 @@ def upload_audit_log_to_s3(audit_log: dict) -> bool:
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=int(os.getenv("REDIS_PORT", "6379")),
+    password=os.getenv("REDIS_PASSWORD"),
     decode_responses=True,
     socket_connect_timeout=5,
     socket_timeout=5,
