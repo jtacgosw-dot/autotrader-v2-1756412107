@@ -779,25 +779,25 @@ def heartbeat_task():
         time.sleep(interval_sec)
 
 def fetch_live_prices():
-    """Background task to fetch live crypto prices from Binance"""
+    """Background task to fetch live crypto prices from CoinGecko"""
     while True:
         try:
             response = requests.get(
-                "https://api.binance.com/api/v3/ticker/price",
-                params={"symbols": '["BTCUSDT","ETHUSDT"]'},
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={"ids": "bitcoin,ethereum", "vs_currencies": "usd"},
                 timeout=10
             )
             if response.status_code == 200:
                 data = response.json()
-                for item in data:
-                    symbol = item["symbol"]
-                    price = float(item["price"])
-                    if symbol == "BTCUSDT":
-                        live_prices["BTC/USDT"] = price
-                        logger.info(f"Updated BTC/USDT price: ${price:,.2f}")
-                    elif symbol == "ETHUSDT":
-                        live_prices["ETH/USDT"] = price
-                        logger.info(f"Updated ETH/USDT price: ${price:,.2f}")
+                if "bitcoin" in data and "usd" in data["bitcoin"]:
+                    btc_price = float(data["bitcoin"]["usd"])
+                    live_prices["BTC/USDT"] = btc_price
+                    logger.info(f"Updated BTC/USDT price: ${btc_price:,.2f}")
+                
+                if "ethereum" in data and "usd" in data["ethereum"]:
+                    eth_price = float(data["ethereum"]["usd"])
+                    live_prices["ETH/USDT"] = eth_price
+                    logger.info(f"Updated ETH/USDT price: ${eth_price:,.2f}")
                 
                 for pos in positions:
                     pair = pos["pair"]
@@ -807,7 +807,7 @@ def fetch_live_prices():
                         pos["pnl"] = round(pnl_value, 2)
                         pos["pnlPercent"] = round((pnl_value / (pos["avgPrice"] * pos["size"])) * 100, 2)
             else:
-                logger.warning(f"Failed to fetch prices from Binance: {response.status_code}")
+                logger.warning(f"Failed to fetch prices from CoinGecko: {response.status_code}")
         except Exception as e:
             logger.error(f"Error fetching live prices: {e}")
         
