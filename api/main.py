@@ -295,6 +295,11 @@ positions = [
     }
 ]
 
+live_prices = {
+    "BTC/USDT": 30120.5,
+    "ETH/USDT": 2000.0
+}
+
 alerts = [
     {
         "id": "alert_001",
@@ -773,6 +778,41 @@ def heartbeat_task():
         interval_sec = alert_manager.heartbeat_interval * 60
         time.sleep(interval_sec)
 
+def fetch_live_prices():
+    """Background task to fetch live crypto prices from Binance"""
+    while True:
+        try:
+            response = requests.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbols": '["BTCUSDT","ETHUSDT"]'},
+                timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json()
+                for item in data:
+                    symbol = item["symbol"]
+                    price = float(item["price"])
+                    if symbol == "BTCUSDT":
+                        live_prices["BTC/USDT"] = price
+                        logger.info(f"Updated BTC/USDT price: ${price:,.2f}")
+                    elif symbol == "ETHUSDT":
+                        live_prices["ETH/USDT"] = price
+                        logger.info(f"Updated ETH/USDT price: ${price:,.2f}")
+                
+                for pos in positions:
+                    pair = pos["pair"]
+                    if pair in live_prices:
+                        pos["currentPrice"] = live_prices[pair]
+                        pnl_value = (pos["currentPrice"] - pos["avgPrice"]) * pos["size"]
+                        pos["pnl"] = round(pnl_value, 2)
+                        pos["pnlPercent"] = round((pnl_value / (pos["avgPrice"] * pos["size"])) * 100, 2)
+            else:
+                logger.warning(f"Failed to fetch prices from Binance: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error fetching live prices: {e}")
+        
+        time.sleep(30)
+
 def start_daily_digest_scheduler():
     """Start the daily digest scheduler thread"""
     digest_thread = threading.Thread(target=daily_digest_task, name="DailyDigestThread", daemon=True)
@@ -782,6 +822,10 @@ def start_daily_digest_scheduler():
     heartbeat_thread = threading.Thread(target=heartbeat_task, name="HeartbeatThread", daemon=True)
     heartbeat_thread.start()
     logger.info("Heartbeat task started")
+    
+    price_thread = threading.Thread(target=fetch_live_prices, name="PriceFetchThread", daemon=True)
+    price_thread.start()
+    logger.info("Live price fetching thread started")
 
 
 
@@ -862,6 +906,15 @@ async def get_orders():
 @app.get("/api/positions")
 async def get_positions():
     return positions
+
+@app.get("/api/prices")
+async def get_prices():
+    """Get current live crypto prices"""
+    return {
+        "prices": live_prices,
+        "timestamp": datetime.utcnow().isoformat(),
+        "source": "binance"
+    }
 
 @app.get("/api/alerts")
 async def get_alerts():
