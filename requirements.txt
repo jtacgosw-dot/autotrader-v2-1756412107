@@ -1,1 +1,8 @@
--r api/requirements.txt
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.10.5
+boto3==1.29.0
+requests==2.31.0
+redis==5.0.1
+python-multipart==0.0.6
+discord.py==2.3.2
