@@ -2,7 +2,7 @@ name: Deploy Web Hub
 
 on:
   push:
-    branches: [main]
+    branches: [main, devin/1756409792-ci-cd-setup]
     paths: ['web/**']
   pull_request:
     paths: ['web/**']
@@ -42,7 +42,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/devin/1756409792-ci-cd-setup')
     steps:
       - uses: actions/checkout@v4
       
