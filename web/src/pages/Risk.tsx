@@ -16,6 +16,14 @@ interface WalletBalance {
   currency: string
   balance: number
   usdValue: number
+  available: number
+  locked: number
+}
+
+interface PaperTradingConfig {
+  initial_capital: number
+  max_position_size: number
+  mode: string
 }
 
 export function Risk() {
@@ -31,10 +39,16 @@ export function Risk() {
   const [maintenanceMode, setMaintenanceMode] = useState(false)
 
   const [walletBalances, setWalletBalances] = useState<WalletBalance[]>([
-    { currency: 'USDT', balance: 95000, usdValue: 95000 },
-    { currency: 'BTC', balance: 0.05, usdValue: 1506 },
-    { currency: 'ETH', balance: 1.2, usdValue: 3494 }
+    { currency: 'USDT', balance: 95000, usdValue: 95000, available: 95000, locked: 0 },
+    { currency: 'BTC', balance: 0.05, usdValue: 1506, available: 0, locked: 0.05 },
+    { currency: 'ETH', balance: 1.2, usdValue: 3494, available: 1.2, locked: 0 }
   ])
+
+  const [paperTradingConfig, setPaperTradingConfig] = useState<PaperTradingConfig>({
+    initial_capital: 100000,
+    max_position_size: 0.5,
+    mode: 'paper'
+  })
 
   const [isUpdating, setIsUpdating] = useState(false)
   const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
@@ -42,10 +56,11 @@ export function Risk() {
   useEffect(() => {
     const fetchRiskData = async () => {
       try {
-        const [riskResponse, balanceResponse, maintenanceResponse] = await Promise.all([
+        const [riskResponse, balanceResponse, maintenanceResponse, configResponse] = await Promise.all([
           fetch(`${apiBase}/api/risk`, { credentials: 'include' }),
           fetch(`${apiBase}/api/balances`, { credentials: 'include' }),
-          fetch(`${apiBase}/api/maintenance`, { credentials: 'include' })
+          fetch(`${apiBase}/api/maintenance`, { credentials: 'include' }),
+          fetch(`${apiBase}/api/config/paper-trading`, { credentials: 'include' })
         ])
         
         if (riskResponse.ok) {
@@ -58,7 +73,9 @@ export function Risk() {
           const balanceArray = Object.entries(balanceData).map(([currency, data]: [string, any]) => ({
             currency,
             balance: data.balance,
-            usdValue: data.balance * (currency === 'USDT' ? 1 : currency === 'BTC' ? 30000 : 2900) // Mock USD conversion
+            usdValue: data.usd_value || 0,
+            available: data.available || 0,
+            locked: data.locked || 0
           }))
           setWalletBalances(balanceArray)
         }
@@ -66,6 +83,11 @@ export function Risk() {
         if (maintenanceResponse.ok) {
           const maintenanceData = await maintenanceResponse.json()
           setMaintenanceMode(maintenanceData.maintenance_mode || false)
+        }
+        
+        if (configResponse.ok) {
+          const configData = await configResponse.json()
+          setPaperTradingConfig(configData)
         }
       } catch (error) {
         console.error('Failed to fetch risk data:', error)
@@ -230,6 +252,32 @@ export function Risk() {
     }
   }
 
+  const handlePaperTradingConfigUpdate = async () => {
+    setIsUpdating(true)
+    try {
+      const response = await fetch(`${apiBase}/api/config/paper-trading`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          initial_capital: paperTradingConfig.initial_capital,
+          max_position_size: paperTradingConfig.max_position_size
+        })
+      })
+      
+      if (response.ok) {
+        alert('Paper trading configuration updated successfully')
+      } else {
+        const error = await response.json()
+        alert(`Failed to update configuration: ${error.detail}`)
+      }
+    } catch (error) {
+      console.error('Failed to update paper trading config:', error)
+      alert('Failed to update configuration: Network error')
+    }
+    setIsUpdating(false)
+  }
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
@@ -330,6 +378,69 @@ export function Risk() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <DollarSign className="w-5 h-5 mr-2" />
+            Paper Trading Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Initial Capital (USD)
+              </label>
+              <input
+                type="number"
+                step="1000"
+                min="1000"
+                max="10000000"
+                value={paperTradingConfig.initial_capital}
+                onChange={(e) => setPaperTradingConfig(prev => ({ ...prev, initial_capital: parseFloat(e.target.value) }))}
+                className="w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Amount of capital to use for paper trading
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Max Position Size (%)
+              </label>
+              <input
+                type="number"
+                step="0.05"
+                min="0.01"
+                max="1.0"
+                value={paperTradingConfig.max_position_size}
+                onChange={(e) => setPaperTradingConfig(prev => ({ ...prev, max_position_size: parseFloat(e.target.value) }))}
+                className="w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Maximum position size as percentage of capital
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between">
+            <div>
+              <Badge variant={paperTradingConfig.mode === 'paper' ? 'default' : 'secondary'}>
+                Mode: {paperTradingConfig.mode.toUpperCase()}
+              </Badge>
+            </div>
+            <button
+              onClick={handlePaperTradingConfigUpdate}
+              disabled={isUpdating}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-6 rounded-md transition-colors"
+            >
+              {isUpdating ? 'Updating...' : 'Update Configuration'}
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

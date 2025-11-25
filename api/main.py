@@ -1167,10 +1167,102 @@ async def get_risk_settings():
 
 @app.get("/api/balances")
 async def get_balances():
+    """Get account balances with live USD values"""
+    btc_price = live_prices.get("BTC/USDT", 0)
+    eth_price = live_prices.get("ETH/USDT", 0)
+    
+    # Calculate locked amounts from positions
+    btc_locked = sum(pos["size"] for pos in positions if pos["pair"] == "BTC/USDT")
+    eth_locked = sum(pos["size"] for pos in positions if pos["pair"] == "ETH/USDT")
+    
+    # Calculate total BTC and ETH from positions
+    btc_total = btc_locked
+    eth_total = eth_locked
+    
     return {
-        "USDT": {"balance": 50000.0, "available": 48750.0, "locked": 1250.0},
-        "BTC": {"balance": 1.5, "available": 1.45, "locked": 0.05},
-        "ETH": {"balance": 10.0, "available": 10.0, "locked": 0.0}
+        "USDT": {
+            "balance": bot_state["total_equity"],
+            "available": bot_state["total_equity"] - (btc_locked * btc_price) - (eth_locked * eth_price),
+            "locked": (btc_locked * btc_price) + (eth_locked * eth_price),
+            "usd_value": bot_state["total_equity"]
+        },
+        "BTC": {
+            "balance": btc_total,
+            "available": 0.0,
+            "locked": btc_locked,
+            "usd_value": btc_total * btc_price
+        },
+        "ETH": {
+            "balance": eth_total,
+            "available": 0.0,
+            "locked": eth_locked,
+            "usd_value": eth_total * eth_price
+        }
+    }
+
+@app.get("/api/pnl/daily")
+async def get_daily_pnl():
+    """Calculate daily P&L from positions using live prices"""
+    total_pnl = 0.0
+    total_pnl_pct = 0.0
+    position_count = len(positions)
+    
+    for pos in positions:
+        current_price = live_prices.get(pos["pair"], pos["avgPrice"])
+        pnl = (current_price - pos["avgPrice"]) * pos["size"]
+        pnl_pct = ((current_price - pos["avgPrice"]) / pos["avgPrice"]) * 100
+        total_pnl += pnl
+        total_pnl_pct += pnl_pct
+    
+    avg_pnl_pct = total_pnl_pct / position_count if position_count > 0 else 0.0
+    
+    return {
+        "pnl_today": total_pnl,
+        "pnl_today_pct": avg_pnl_pct,
+        "total_equity": bot_state["total_equity"],
+        "starting_equity": bot_state["total_equity"] - total_pnl,
+        "position_count": position_count,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+class PaperTradingConfig(BaseModel):
+    initial_capital: float
+    max_position_size: float
+
+@app.get("/api/config/paper-trading")
+async def get_paper_trading_config():
+    """Get paper trading configuration"""
+    return {
+        "initial_capital": bot_state["total_equity"],
+        "max_position_size": bot_state["max_pos_pct"],
+        "mode": bot_state["mode"]
+    }
+
+@app.post("/api/config/paper-trading")
+async def update_paper_trading_config(
+    config: PaperTradingConfig,
+    user=Depends(require_role("controller"))
+):
+    """Update paper trading configuration"""
+    bot_state["total_equity"] = config.initial_capital
+    bot_state["max_pos_pct"] = config.max_position_size
+    
+    audit_log = {
+        "ts": datetime.utcnow().isoformat(),
+        "action": "paper_trading_config_update",
+        "user": user["username"],
+        "details": f"Updated paper trading config: capital=${config.initial_capital}, max_pos={config.max_position_size}%",
+        "request_id": request_id_var.get()
+    }
+    
+    upload_audit_log_to_s3(audit_log)
+    
+    return {
+        "message": "Paper trading configuration updated",
+        "config": {
+            "initial_capital": bot_state["total_equity"],
+            "max_position_size": bot_state["max_pos_pct"]
+        }
     }
 
 @app.post("/api/alerts/trigger/tg-health")

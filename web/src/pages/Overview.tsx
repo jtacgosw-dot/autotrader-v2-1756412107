@@ -25,6 +25,15 @@ interface BotStatus {
   }
 }
 
+interface DailyPnL {
+  pnl_today: number
+  pnl_today_pct: number
+  total_equity: number
+  starting_equity: number
+  position_count: number
+  timestamp: string
+}
+
 export function Overview() {
   const [botStatus, setBotStatus] = useState<BotStatus>({
     status: 'running',
@@ -39,6 +48,15 @@ export function Overview() {
   })
 
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null)
+  
+  const [dailyPnL, setDailyPnL] = useState<DailyPnL>({
+    pnl_today: 0,
+    pnl_today_pct: 0,
+    total_equity: 100000,
+    starting_equity: 100000,
+    position_count: 0,
+    timestamp: new Date().toISOString()
+  })
 
   const apiBase = import.meta.env.VITE_API_BASE || 'https://api.lunaraxolotl.com'
 
@@ -71,11 +89,27 @@ export function Overview() {
       }
     }
 
+    const fetchDailyPnL = async () => {
+      try {
+        const response = await fetch(`${apiBase}/api/pnl/daily`, {
+          credentials: 'include'
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setDailyPnL(data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch daily P&L:', error)
+      }
+    }
+
     fetchStatus()
     fetchHealthStatus()
+    fetchDailyPnL()
     const interval = setInterval(() => {
       fetchStatus()
       fetchHealthStatus()
+      fetchDailyPnL()
     }, 5000)
     return () => clearInterval(interval)
   }, [apiBase])
@@ -146,16 +180,19 @@ export function Overview() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">P&amp;L Today</CardTitle>
-            {botStatus.pnlToday >= 0 ? (
+            {dailyPnL.pnl_today >= 0 ? (
               <TrendingUp className="h-4 w-4 text-green-400" />
             ) : (
               <TrendingDown className="h-4 w-4 text-red-400" />
             )}
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${botStatus.pnlToday >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              ${botStatus.pnlToday.toFixed(2)}
+            <div className={`text-2xl font-bold ${dailyPnL.pnl_today >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              ${dailyPnL.pnl_today.toFixed(2)}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {dailyPnL.pnl_today_pct >= 0 ? '+' : ''}{dailyPnL.pnl_today_pct.toFixed(2)}%
+            </p>
           </CardContent>
         </Card>
 
@@ -172,6 +209,39 @@ export function Overview() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Paper Trading Performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Starting Equity</span>
+                <span className="font-medium">${dailyPnL.starting_equity.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Current Equity</span>
+                <span className="font-medium">${dailyPnL.total_equity.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Daily P&L</span>
+                <span className={`font-medium ${dailyPnL.pnl_today >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {dailyPnL.pnl_today >= 0 ? '+' : ''}${dailyPnL.pnl_today.toFixed(2)} ({dailyPnL.pnl_today_pct >= 0 ? '+' : ''}{dailyPnL.pnl_today_pct.toFixed(2)}%)
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Active Positions</span>
+                <span className="font-medium">{dailyPnL.position_count}</span>
+              </div>
+              <div className="border-t pt-3 mt-3">
+                <div className="text-xs text-muted-foreground">
+                  Last updated: {new Date(dailyPnL.timestamp).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Trading Sleeves</CardTitle>
